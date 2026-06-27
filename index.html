@@ -76,6 +76,26 @@
     text-transform: uppercase; opacity: 0; transition: opacity 0.2s;
     text-shadow: 0 0 20px rgba(255,60,90,0.6);
   }
+
+  #return {
+    position: fixed; inset: 0; z-index: 6; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    opacity: 0; transition: opacity 0.15s;
+    color: #ff5a7a; text-shadow: 0 0 36px rgba(255,40,80,0.75);
+  }
+  #return .rlabel {
+    font-size: 16px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: #ff8aa0; margin-bottom: 6px;
+  }
+  #return .rnum {
+    font-size: clamp(96px, 22vw, 230px); font-weight: 800; line-height: 1;
+    font-variant-numeric: tabular-nums;
+    animation: rpulse 1s ease-in-out infinite;
+  }
+  @keyframes rpulse {
+    0%, 100% { transform: scale(1); opacity: 0.92; }
+    50% { transform: scale(1.13); opacity: 1; }
+  }
 </style>
 </head>
 <body>
@@ -87,6 +107,11 @@
 </div>
 
 <div id="warn">⚠ Event Horizon ⚠</div>
+
+<div id="return">
+  <div class="rlabel">Re-enter in</div>
+  <div class="rnum" id="returnNum">5</div>
+</div>
 
 <div id="overlayStart" class="overlay">
   <div class="title">Escape the Void</div>
@@ -131,7 +156,7 @@
   const THRUST_ACCEL = 780;       // player thrust from WASD/arrows (px/s^2)
   const GRAV_STRENGTH = 620;      // base pull of a void
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
-  const OFFSCREEN_MARGIN = 520;   // how far past the edge before you're "lost"
+  const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
   const STAR_COUNT = 90;
   // No medium drag: momentum is conserved. Only gravity and your thrust change
   // velocity, so with the right tangential speed you can settle into an orbit.
@@ -141,6 +166,7 @@
   let lastT = 0;
   let elapsed = 0;
   let spawnTimer = 0;
+  let offT = 0;                  // seconds spent continuously off-screen
   let best = parseFloat(localStorage.getItem("etv_best") || "0") || 0;
 
   const keys = { up: false, down: false, left: false, right: false };
@@ -192,12 +218,13 @@
     } while (Math.hypot(x - ship.x, y - ship.y) < 300 && tries < 30);
 
     const n = holes.length;
+    const size = 0.45 + Math.random() * 0.95;  // 0.45..1.4 overall scale, per void
     holes.push({
       x, y,
-      // each successive void pulls a little harder -> compounding chaos
-      str: GRAV_STRENGTH * (1 + n * 0.14),
-      core: 11 + Math.random() * 6,      // event-horizon radius (death zone)
-      reach: 540 + Math.random() * 160,  // grid-distortion radius (visual)
+      // pull varies per void (size + extra jitter) and compounds as more appear
+      str: GRAV_STRENGTH * size * (0.85 + Math.random() * 0.4) * (1 + n * 0.12),
+      core: 4 + size * 6,                // ~6.7..12.4 px: smaller & more varied
+      reach: 320 + size * 240 + Math.random() * 60, // grid-distortion radius (visual)
       born: elapsed,
       spin: (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.8),
       phase: Math.random() * Math.PI * 2,
@@ -239,6 +266,7 @@
   function reset() {
     elapsed = 0;
     spawnTimer = 0;
+    offT = 0;
     holes = [];
     particles = [];
     shake = 0;
@@ -264,6 +292,7 @@
     if (onscreen) { burst(ship.x, ship.y, "#8ab0ff", 60); shake = 18; }
     document.getElementById("overTitle").textContent =
       cause === "escaped" ? "Lost to the Void" : "Consumed";
+    document.getElementById("return").style.opacity = "0";
     if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
     document.getElementById("bestLine").textContent =
@@ -313,10 +342,14 @@
     // when coasting, point the nose along travel so the drift reads clearly
     if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6) ship.angle = Math.atan2(ship.vy, ship.vx);
 
-    // no walls — the ship flies free; drifting far enough past the edge is a loss
-    if (ship.x < -OFFSCREEN_MARGIN || ship.x > W + OFFSCREEN_MARGIN ||
-        ship.y < -OFFSCREEN_MARGIN || ship.y > H + OFFSCREEN_MARGIN) {
-      gameOver("escaped"); return;
+    // no walls — fly as far out as you like, but you must return: a countdown
+    // starts the moment you leave the viewport and resets when you re-enter.
+    const offscreen = ship.x < 0 || ship.x > W || ship.y < 0 || ship.y > H;
+    if (offscreen) {
+      offT += dt;
+      if (offT >= RETURN_LIMIT) { gameOver("escaped"); return; }
+    } else {
+      offT = 0;
     }
 
     // danger / death check
@@ -570,6 +603,13 @@
       update(dt);
       document.getElementById("hudTime").textContent = elapsed.toFixed(1);
       document.getElementById("hudHoles").textContent = holes.length;
+      const ret = document.getElementById("return");
+      if (running && offT > 0) {
+        document.getElementById("returnNum").textContent = Math.ceil(RETURN_LIMIT - offT);
+        ret.style.opacity = "1";
+      } else {
+        ret.style.opacity = "0";
+      }
     } else {
       // keep particles animating during the death burst
       for (const p of particles) {
