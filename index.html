@@ -91,12 +91,12 @@
 <div id="overlayStart" class="overlay">
   <div class="title">Escape the Void</div>
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
-  <div class="hint">Every 10 seconds a new void emerges — the pull only compounds.</div>
+  <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
 </div>
 
 <div id="overlayOver" class="overlay hidden">
-  <div class="title" style="font-size: clamp(28px,6vw,54px);">Consumed</div>
+  <div class="title" id="overTitle" style="font-size: clamp(28px,6vw,54px);">Consumed</div>
   <div class="stat-big" id="finalTime">0.0s</div>
   <div class="stat-label">Survived</div>
   <div class="best" id="bestLine"></div>
@@ -128,11 +128,13 @@
   // ---- Config ----
   const GRID_SPACING = 46;        // px between grid points
   const SPAWN_INTERVAL = 10;      // seconds between new voids
-  const THRUST_ACCEL = 1250;      // player thrust from WASD/arrows (px/s^2)
-  const SHIP_DRAG = 1.5;          // space-like damping (lets momentum carry)
-  const GRAV_STRENGTH = 540;      // base pull of a void
-  const GRAV_SCALE = 420;         // distance scale of the logarithmic falloff
+  const THRUST_ACCEL = 780;       // player thrust from WASD/arrows (px/s^2)
+  const GRAV_STRENGTH = 620;      // base pull of a void
+  const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
+  const OFFSCREEN_MARGIN = 520;   // how far past the edge before you're "lost"
   const STAR_COUNT = 90;
+  // No medium drag: momentum is conserved. Only gravity and your thrust change
+  // velocity, so with the right tangential speed you can settle into an orbit.
 
   // ---- State ----
   let running = false;
@@ -187,14 +189,14 @@
       x = 80 + Math.random() * (W - 160);
       y = 100 + Math.random() * (H - 200);
       tries++;
-    } while (Math.hypot(x - ship.x, y - ship.y) < 240 && tries < 30);
+    } while (Math.hypot(x - ship.x, y - ship.y) < 300 && tries < 30);
 
     const n = holes.length;
     holes.push({
       x, y,
       // each successive void pulls a little harder -> compounding chaos
       str: GRAV_STRENGTH * (1 + n * 0.14),
-      core: 16 + Math.random() * 8,      // event-horizon radius (death zone)
+      core: 11 + Math.random() * 6,      // event-horizon radius (death zone)
       reach: 540 + Math.random() * 160,  // grid-distortion radius (visual)
       born: elapsed,
       spin: (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.8),
@@ -256,10 +258,12 @@
     requestAnimationFrame(loop);
   }
 
-  function gameOver() {
+  function gameOver(cause) {
     running = false;
-    burst(ship.x, ship.y, "#8ab0ff", 60);
-    shake = 18;
+    const onscreen = ship.x >= 0 && ship.x <= W && ship.y >= 0 && ship.y <= H;
+    if (onscreen) { burst(ship.x, ship.y, "#8ab0ff", 60); shake = 18; }
+    document.getElementById("overTitle").textContent =
+      cause === "escaped" ? "Lost to the Void" : "Consumed";
     if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
     document.getElementById("bestLine").textContent =
@@ -302,21 +306,18 @@
     ship.vx += gx * dt;
     ship.vy += gy * dt;
 
-    const damp = Math.max(0, 1 - SHIP_DRAG * dt);
-    ship.vx *= damp; ship.vy *= damp;
-
+    // no drag — pure momentum
     ship.x += ship.vx * dt;
     ship.y += ship.vy * dt;
 
     // when coasting, point the nose along travel so the drift reads clearly
     if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6) ship.angle = Math.atan2(ship.vy, ship.vx);
 
-    // keep in bounds (soft walls bounce a little)
-    const m = 8;
-    if (ship.x < m) { ship.x = m; ship.vx = Math.abs(ship.vx) * 0.4; }
-    if (ship.x > W - m) { ship.x = W - m; ship.vx = -Math.abs(ship.vx) * 0.4; }
-    if (ship.y < m) { ship.y = m; ship.vy = Math.abs(ship.vy) * 0.4; }
-    if (ship.y > H - m) { ship.y = H - m; ship.vy = -Math.abs(ship.vy) * 0.4; }
+    // no walls — the ship flies free; drifting far enough past the edge is a loss
+    if (ship.x < -OFFSCREEN_MARGIN || ship.x > W + OFFSCREEN_MARGIN ||
+        ship.y < -OFFSCREEN_MARGIN || ship.y > H + OFFSCREEN_MARGIN) {
+      gameOver("escaped"); return;
+    }
 
     // danger / death check
     let danger = false;
@@ -515,6 +516,31 @@
     ctx.globalAlpha = 1;
   }
 
+  // arrow pinned to the screen edge pointing at the ship when it flies off-view
+  function drawOffscreenIndicator() {
+    const onX = ship.x >= 0 && ship.x <= W;
+    const onY = ship.y >= 0 && ship.y <= H;
+    if (onX && onY) return;
+    const pad = 26;
+    const cx = Math.max(pad, Math.min(W - pad, ship.x));
+    const cy = Math.max(pad, Math.min(H - pad, ship.y));
+    const ang = Math.atan2(ship.y - cy, ship.x - cx);
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.fillStyle = "rgba(150,185,255,0.95)";
+    ctx.beginPath();
+    ctx.moveTo(13, 0); ctx.lineTo(-7, -8); ctx.lineTo(-7, 8); ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    const d = Math.round(Math.hypot(ship.x - cx, ship.y - cy));
+    ctx.fillStyle = "rgba(150,185,255,0.85)";
+    ctx.font = "600 12px -apple-system, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(d + "px", cx, cy - 16);
+    ctx.textAlign = "left";
+  }
+
   function render() {
     ctx.save();
     if (shake > 0) {
@@ -529,7 +555,7 @@
     drawGrid();
     drawHoles();
     drawParticles();
-    if (running) drawShip();
+    if (running) { drawShip(); drawOffscreenIndicator(); }
 
     ctx.restore();
   }
