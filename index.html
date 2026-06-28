@@ -199,8 +199,14 @@
   const ctx = canvas.getContext("2d");
 
   // ---- Sizing (handle HiDPI) ----
-  let W = 0, H = 0, DPR = 1;
+  // SC scales every world quantity (lengths, speeds, accelerations) to the
+  // viewport, so the game plays proportionally the same on a phone or a monitor
+  // in any orientation. The feel was tuned at ~1100x720; SC=1 there. We key off
+  // sqrt(area) (geometric mean of W,H) so portrait and landscape are symmetric.
+  let W = 0, H = 0, DPR = 1, SC = 1;
+  const REF = Math.sqrt(1100 * 720);
   function resize() {
+    const oldW = W, oldH = H, oldSC = SC;
     DPR = Math.min(window.devicePixelRatio || 1, 2);
     W = window.innerWidth;
     H = window.innerHeight;
@@ -209,6 +215,13 @@
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    SC = Math.sqrt(W * H) / REF;
+    // on a live resize/rotation, rescale the running state so play stays fair
+    if (oldW && oldH) {
+      const rx = W / oldW, ry = H / oldH, rs = SC / oldSC;
+      ship.x *= rx; ship.y *= ry; ship.vx *= rs; ship.vy *= rs;
+      for (const h of holes) { h.x *= rx; h.y *= ry; h.core *= rs; h.reach *= rs; h.str *= rs; }
+    }
   }
   window.addEventListener("resize", resize);
   resize();
@@ -474,21 +487,22 @@
   // ---- Black holes ----
   function spawnHole() {
     // place away from the ship so it isn't an instant death
+    const mx = 80 * SC, my = 100 * SC;
     let x, y, tries = 0;
     do {
-      x = 80 + Math.random() * (W - 160);
-      y = 100 + Math.random() * (H - 200);
+      x = mx + Math.random() * (W - mx * 2);
+      y = my + Math.random() * (H - my * 2);
       tries++;
-    } while (Math.hypot(x - ship.x, y - ship.y) < 300 && tries < 30);
+    } while (Math.hypot(x - ship.x, y - ship.y) < 300 * SC && tries < 30);
 
     const n = holes.length;
     const size = 0.45 + Math.random() * 0.95;  // 0.45..1.4 overall scale, per void
     holes.push({
       x, y,
       // pull varies per void (size + extra jitter) and compounds as more appear
-      str: GRAV_STRENGTH * size * (0.85 + Math.random() * 0.4) * (1 + n * 0.12),
-      core: 4 + size * 6,                // ~6.7..12.4 px: smaller & more varied
-      reach: 320 + size * 240 + Math.random() * 60, // grid-distortion radius (visual)
+      str: GRAV_STRENGTH * SC * size * (0.85 + Math.random() * 0.4) * (1 + n * 0.12),
+      core: (4 + size * 6) * SC,         // smaller & more varied, scaled to viewport
+      reach: (320 + size * 240 + Math.random() * 60) * SC, // grid-distortion radius (visual)
       born: elapsed,
       spin: (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.8),
       phase: Math.random() * Math.PI * 2,
@@ -505,7 +519,7 @@
       const dx = h.x - px, dy = h.y - py;
       let r = Math.hypot(dx, dy);
       if (r < h.core) r = h.core;           // clamp at the horizon to avoid blow-up
-      const f = h.str * h.grow * Math.log(1 + GRAV_SCALE / r);
+      const f = h.str * h.grow * Math.log(1 + (GRAV_SCALE * SC) / r);
       ax += (dx / r) * f;
       ay += (dy / r) * f;
     }
@@ -516,12 +530,12 @@
   function burst(x, y, color, count) {
     for (let i = 0; i < count; i++) {
       const a = Math.random() * Math.PI * 2;
-      const s = 40 + Math.random() * 320;
+      const s = (40 + Math.random() * 320) * SC;
       particles.push({
         x, y,
         vx: Math.cos(a) * s, vy: Math.sin(a) * s,
         life: 0.6 + Math.random() * 0.7, age: 0,
-        r: 1 + Math.random() * 2.5, color,
+        r: (1 + Math.random() * 2.5) * SC, color,
       });
     }
   }
@@ -557,7 +571,7 @@
   function gameOver(cause) {
     running = false;
     const onscreen = ship.x >= 0 && ship.x <= W && ship.y >= 0 && ship.y <= H;
-    if (onscreen) { burst(ship.x, ship.y, "#8ab0ff", 60); shake = 18; }
+    if (onscreen) { burst(ship.x, ship.y, "#8ab0ff", 60); shake = 18 * SC; }
     document.getElementById("overTitle").textContent =
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
@@ -602,8 +616,8 @@
     let m = Math.hypot(ix, iy);
     if (m > 0.001) {
       if (m > 1) { ix /= m; iy /= m; }  // clamp; partial deflection = partial thrust
-      ship.vx += ix * THRUST_ACCEL * dt;
-      ship.vy += iy * THRUST_ACCEL * dt;
+      ship.vx += ix * THRUST_ACCEL * SC * dt;
+      ship.vy += iy * THRUST_ACCEL * SC * dt;
       ship.angle = Math.atan2(iy, ix);
       thrusting = true;
     }
@@ -617,7 +631,7 @@
     ship.y += ship.vy * dt;
 
     // when coasting, point the nose along travel so the drift reads clearly
-    if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6) ship.angle = Math.atan2(ship.vy, ship.vx);
+    if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6 * SC) ship.angle = Math.atan2(ship.vy, ship.vx);
 
     // no walls — fly as far out as you like, but you must return: a countdown
     // starts the moment you leave the viewport and resets when you re-enter.
@@ -633,8 +647,8 @@
     let danger = false;
     for (const h of holes) {
       const d = Math.hypot(h.x - ship.x, h.y - ship.y);
-      if (d < h.core + 7) { gameOver(); return; }
-      if (d < h.core + 70) danger = true;
+      if (d < h.core + 7 * SC) { gameOver(); return; }
+      if (d < h.core + 70 * SC) danger = true;
     }
     document.getElementById("warn").style.opacity = danger ? "1" : "0";
 
@@ -646,22 +660,23 @@
     }
     particles = particles.filter((p) => p.age < p.life);
 
-    if (shake > 0) shake = Math.max(0, shake - dt * 40);
+    if (shake > 0) shake = Math.max(0, shake - dt * 40 * SC);
   }
 
   // ---- Render ----
   function drawGrid() {
     // build a displaced lattice and stroke it -> gravitational lensing look
-    const cols = Math.ceil(W / GRID_SPACING) + 2;
-    const rows = Math.ceil(H / GRID_SPACING) + 2;
+    const gs = GRID_SPACING * SC;
+    const cols = Math.ceil(W / gs) + 2;
+    const rows = Math.ceil(H / gs) + 2;
 
     // precompute displaced points
     const pts = new Array(rows);
     for (let j = 0; j < rows; j++) {
       pts[j] = new Array(cols);
       for (let i = 0; i < cols; i++) {
-        const ox = (i - 1) * GRID_SPACING;
-        const oy = (j - 1) * GRID_SPACING;
+        const ox = (i - 1) * gs;
+        const oy = (j - 1) * gs;
         let dx = 0, dy = 0;
         for (const h of holes) {
           const vx = ox - h.x, vy = oy - h.y;
@@ -735,7 +750,7 @@
       for (let a = 0; a < 3; a++) {
         ctx.rotate((Math.PI * 2) / 3);
         ctx.strokeStyle = `rgba(150,120,255,${0.20 - a * 0.04})`;
-        ctx.lineWidth = 2.5;
+        ctx.lineWidth = 2.5 * SC;
         ctx.beginPath();
         ctx.arc(0, 0, R * (2.2 + a * 1.1), 0.2, Math.PI * 1.4);
         ctx.stroke();
@@ -764,11 +779,12 @@
     ctx.save();
     ctx.translate(ship.x, ship.y);
     ctx.rotate(ship.angle);
+    ctx.scale(SC, SC);   // draw the ship in fixed local units, scaled to viewport
 
-    // engine trail
+    // engine trail (sp is a scaled speed; convert back to local units for length)
     const sp = Math.hypot(ship.vx, ship.vy);
-    if (sp > 20) {
-      const tl = Math.min(40, sp * 0.05);
+    if (sp > 20 * SC) {
+      const tl = Math.min(40, sp * 0.05 / SC);
       const g = ctx.createLinearGradient(-tl - 8, 0, -6, 0);
       g.addColorStop(0, "rgba(120,180,255,0)");
       g.addColorStop(1, "rgba(150,200,255,0.7)");
@@ -804,12 +820,12 @@
 
     // soft halo
     ctx.globalAlpha = 0.5;
-    const halo = ctx.createRadialGradient(ship.x, ship.y, 2, ship.x, ship.y, 22);
+    const halo = ctx.createRadialGradient(ship.x, ship.y, 2 * SC, ship.x, ship.y, 22 * SC);
     halo.addColorStop(0, "rgba(140,180,255,0.5)");
     halo.addColorStop(1, "rgba(140,180,255,0)");
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 22, 0, Math.PI * 2);
+    ctx.arc(ship.x, ship.y, 22 * SC, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
