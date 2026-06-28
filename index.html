@@ -148,6 +148,8 @@
   .board li .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .board li .tm { font-variant-numeric: tabular-nums; font-weight: 700; color: #aeb9ff; }
   .board .empty { text-align: center; color: #6a76a8; font-size: 13px; padding: 10px; }
+  .lbsetup { display: inline-block; margin-top: 14px; font-size: 12px; color: #7a86b8; text-decoration: underline; cursor: pointer; }
+  .lbsetup:hover { color: #aeb9ff; }
 </style>
 </head>
 <body>
@@ -173,6 +175,7 @@
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
   <div id="boardStart" class="board"><h3>Top Runs</h3><div class="list"></div></div>
+  <a id="lbSetup" class="lbsetup" href="#">Set up a global leaderboard</a>
 </div>
 
 <div id="overlayOver" class="overlay hidden">
@@ -309,12 +312,24 @@
     joyEl.addEventListener("pointercancel", endJoy);
   }
 
-  // ---- Leaderboard (local, no signup) ----
-  const MAX_SCORES = 10;
+  // ---- Leaderboard (global via jsonblob, local fallback, no signup) ----
+  const MAX_SCORES = 10;        // entries shown per board
+  const GLOBAL_KEEP = 100;      // entries retained in the shared store
+  // Shared store on jsonblob.com (keyless). The baked-in id below is shared by
+  // every player; a device that runs the in-game "set up" link stores its own
+  // id in localStorage which overrides this until a shared id is baked in.
+  const LB_BLOB_ID = "";        // <-- set to the shared blob id to go global for everyone
+  const LB_BASE = "https://jsonblob.com/api/jsonBlob";
+  function blobId() { return localStorage.getItem("etv_lb") || LB_BLOB_ID; }
+  function lbConfigured() { return !!blobId(); }
+  function lbUrl() { return LB_BASE + "/" + blobId(); }
+
   function loadScores() {
     try { return JSON.parse(localStorage.getItem("etv_scores") || "[]"); } catch (_) { return []; }
   }
-  let scores = loadScores();
+  let scores = loadScores();      // local backup / offline board
+  let globalScores = [];          // last fetched global board
+  let online = false;             // is the shared board reachable?
   let lastName = localStorage.getItem("etv_name") || "";
   let pendingTs = null, pendingScore = 0;
 
@@ -323,12 +338,15 @@
   const saveBtn = document.getElementById("saveBtn");
   const boardStartList = document.querySelector("#boardStart .list");
   const boardOverList = document.querySelector("#boardOver .list");
+  const setupLink = document.getElementById("lbSetup");
 
   function fmtTime(t) { return t.toFixed(1) + "s"; }
+  function currentList() { return online ? globalScores : scores; }
+
   // textContent everywhere -> player names can't inject markup
-  function renderBoard(el, hlTs, limit) {
+  function renderBoard(el, list, hlTs, limit) {
     el.textContent = "";
-    const top = scores.slice(0, limit);
+    const top = list.slice(0, limit);
     if (!top.length) {
       const d = document.createElement("div");
       d.className = "empty"; d.textContent = "No runs yet — be the first.";
@@ -346,23 +364,73 @@
     el.appendChild(ol);
   }
 
+  function setBoardTitles() {
+    const label = !lbConfigured() ? "Top Runs (local)"
+      : online ? "Global Top Runs" : "Top Runs (offline)";
+    document.querySelectorAll(".board h3").forEach((h) => { h.textContent = label; });
+    if (setupLink) setupLink.style.display = lbConfigured() ? "none" : "";
+  }
+  function renderBoards(hlTs) {
+    const list = currentList();
+    renderBoard(boardOverList, list, hlTs || null, MAX_SCORES);
+    renderBoard(boardStartList, list, null, 5);
+    setBoardTitles();
+  }
+
+  async function fetchGlobal() {
+    if (!lbConfigured()) return null;
+    try {
+      const r = await fetch(lbUrl(), { headers: { Accept: "application/json" }, cache: "no-store" });
+      if (!r.ok) return null;
+      const d = await r.json();
+      return Array.isArray(d && d.scores) ? d.scores : [];
+    } catch (_) { return null; }
+  }
+  async function pushGlobal(entry) {
+    if (!lbConfigured()) return null;
+    try {
+      const cur = (await fetchGlobal()) || [];   // re-read so we don't clobber others
+      cur.push(entry);
+      cur.sort((a, b) => b.time - a.time);
+      const trimmed = cur.slice(0, GLOBAL_KEEP);
+      const r = await fetch(lbUrl(), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ scores: trimmed }),
+      });
+      if (!r.ok) return null;
+      return trimmed;
+    } catch (_) { return null; }
+  }
+  async function refreshGlobal() {
+    const g = await fetchGlobal();
+    online = g != null;
+    if (g) globalScores = g;
+    renderBoards();
+  }
+
   function offerSave(score) {
     pendingScore = score; pendingTs = Date.now();
     nameInput.value = lastName;
     saveRow.classList.remove("hidden");
-    renderBoard(boardOverList, null, MAX_SCORES);
+    renderBoards();
   }
-  function commitSave() {
+  async function commitSave() {
     if (pendingTs == null) return;
     const name = (nameInput.value.trim() || "Anonymous").slice(0, 14);
     lastName = name; localStorage.setItem("etv_name", name);
-    scores.push({ name, time: pendingScore, ts: pendingTs });
-    scores.sort((a, b) => b.time - a.time);
-    scores = scores.slice(0, MAX_SCORES);
+    const entry = { name, time: pendingScore, ts: pendingTs };
+    // always keep a local copy as an offline fallback
+    scores.push(entry); scores.sort((a, b) => b.time - a.time); scores = scores.slice(0, MAX_SCORES);
     localStorage.setItem("etv_scores", JSON.stringify(scores));
     saveRow.classList.add("hidden");
-    renderBoard(boardOverList, pendingTs, MAX_SCORES);
-    renderBoard(boardStartList, null, 5);
+    if (lbConfigured()) {
+      saveBtn.disabled = true; saveBtn.textContent = "Saving…";
+      const g = await pushGlobal(entry);
+      saveBtn.disabled = false; saveBtn.textContent = "Save";
+      if (g) { globalScores = g; online = true; }
+    }
+    renderBoards(pendingTs);
     pendingTs = null;
   }
   if (saveBtn) saveBtn.addEventListener("click", commitSave);
@@ -370,7 +438,38 @@
     if (e.key === "Enter") { e.preventDefault(); commitSave(); }
     e.stopPropagation();
   });
-  renderBoard(boardStartList, null, 5);
+
+  // One-time setup: mint the shared store from this browser (no signup, no key).
+  async function createLeaderboard() {
+    try {
+      const r = await fetch(LB_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ scores: [] }),
+      });
+      const loc = r.headers.get("Location") || r.url || "";
+      const id = loc.split("/").pop();
+      if (!id) return null;
+      localStorage.setItem("etv_lb", id);
+      online = true; globalScores = [];
+      renderBoards();
+      console.log("[Escape the Void] global leaderboard id:", id);
+      return id;
+    } catch (_) { return null; }
+  }
+  window.etvCreateLeaderboard = createLeaderboard;
+  if (setupLink) setupLink.addEventListener("click", async (e) => {
+    e.preventDefault();
+    setupLink.textContent = "Creating…";
+    const id = await createLeaderboard();
+    setupLink.style.display = "";
+    setupLink.textContent = id
+      ? "Global board ready ✓ — id " + id + " (send to dev to share for all)"
+      : "Couldn't reach the server — tap to retry";
+  });
+
+  renderBoards();      // initial paint (local)
+  refreshGlobal();     // then pull the shared board if one is configured
 
   // ---- Black holes ----
   function spawnHole() {
