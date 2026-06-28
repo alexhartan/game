@@ -156,8 +156,6 @@
     .board li { gap: 6px; padding: 5px 7px; font-size: 12px; }
     .board li .tm { font-size: 12px; }
   }
-  .lbsetup { display: inline-block; margin-top: 14px; font-size: 12px; color: #7a86b8; text-decoration: underline; cursor: pointer; }
-  .lbsetup:hover { color: #aeb9ff; }
 </style>
 </head>
 <body>
@@ -189,7 +187,6 @@
       <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
     </div>
   </div>
-  <a id="lbSetup" class="lbsetup" href="#">Set up a global leaderboard</a>
 </div>
 
 <div id="overlayOver" class="overlay hidden">
@@ -345,17 +342,16 @@
     joyEl.addEventListener("pointercancel", endJoy);
   }
 
-  // ---- Leaderboard (global via jsonblob, local fallback, no signup) ----
+  // ---- Leaderboard (global via Supabase REST, local fallback) ----
   const MAX_SCORES = 10;        // entries shown per board
-  const GLOBAL_KEEP = 100;      // entries retained in the shared store
-  // Shared store on jsonblob.com (keyless). The baked-in id below is shared by
-  // every player; a device that runs the in-game "set up" link stores its own
-  // id in localStorage which overrides this until a shared id is baked in.
-  const LB_BLOB_ID = "";        // <-- set to the shared blob id to go global for everyone
-  const LB_BASE = "https://jsonblob.com/api/jsonBlob";
-  function blobId() { return localStorage.getItem("etv_lb") || LB_BLOB_ID; }
-  function lbConfigured() { return !!blobId(); }
-  function lbUrl() { return LB_BASE + "/" + blobId(); }
+  // Supabase project (browser-safe: the anon key is meant to ship in clients;
+  // a row-level-security policy limits anon to read + validated insert only).
+  const SB_URL = "";            // <-- e.g. https://abcd1234.supabase.co
+  const SB_KEY = "";            // <-- anon public key
+  function lbConfigured() { return !!(SB_URL && SB_KEY); }
+  function sbHeaders(extra) {
+    return Object.assign({ apikey: SB_KEY, Authorization: "Bearer " + SB_KEY }, extra || {});
+  }
 
   function loadScores() {
     try { return JSON.parse(localStorage.getItem("etv_scores") || "[]"); } catch (_) { return []; }
@@ -371,7 +367,6 @@
   const saveBtn = document.getElementById("saveBtn");
   const boardStartEl = document.getElementById("boardStart");
   const boardOverEl = document.getElementById("boardOver");
-  const setupLink = document.getElementById("lbSetup");
   // Mobile and desktop play at different aspect ratios, so they get separate
   // ladders. Touch capability tags which one a run belongs to.
   const DEVICE = isTouch ? "mobile" : "desktop";
@@ -417,7 +412,6 @@
     const label = !lbConfigured() ? "Top Runs (local)"
       : online ? "Global Top Runs" : "Top Runs (offline)";
     document.querySelectorAll(".board h3").forEach((h) => { h.textContent = label; });
-    if (setupLink) setupLink.style.display = lbConfigured() ? "none" : "";
   }
   function renderBoards(hlTs) {
     const list = currentList();
@@ -429,25 +423,25 @@
   async function fetchGlobal() {
     if (!lbConfigured()) return null;
     try {
-      const r = await fetch(lbUrl(), { headers: { Accept: "application/json" }, cache: "no-store" });
+      // top runs for each device ladder; the DB handles ordering & concurrency
+      const q = "/rest/v1/scores?select=name,time,ts,dev&order=time.desc&limit=200";
+      const r = await fetch(SB_URL + q, { headers: sbHeaders(), cache: "no-store" });
       if (!r.ok) return null;
       const d = await r.json();
-      return Array.isArray(d && d.scores) ? d.scores : [];
+      return Array.isArray(d) ? d : [];
     } catch (_) { return null; }
   }
   async function pushGlobal(entry) {
     if (!lbConfigured()) return null;
     try {
-      const cur = (await fetchGlobal()) || [];   // re-read so we don't clobber others
-      cur.push(entry);
-      const trimmed = trimByDev(cur, GLOBAL_KEEP); // keep top N of each device ladder
-      const r = await fetch(lbUrl(), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ scores: trimmed }),
+      // a plain insert — no read-modify-write, so simultaneous submits can't clobber
+      const r = await fetch(SB_URL + "/rest/v1/scores", {
+        method: "POST",
+        headers: sbHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
+        body: JSON.stringify({ name: entry.name, time: entry.time, ts: entry.ts, dev: entry.dev }),
       });
       if (!r.ok) return null;
-      return trimmed;
+      return await fetchGlobal();   // re-read the merged, sorted board
     } catch (_) { return null; }
   }
   async function refreshGlobal() {
@@ -485,40 +479,6 @@
   if (nameInput) nameInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); commitSave(); }
     e.stopPropagation();
-  });
-
-  // One-time setup: mint the shared store from this browser (no signup, no key).
-  // Returns { id } on success or { error } with the real reason for diagnosis.
-  async function createLeaderboard() {
-    try {
-      const r = await fetch(LB_BASE, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ scores: [] }),
-      });
-      if (!r.ok) return { error: "server returned HTTP " + r.status };
-      const loc = r.headers.get("Location") || "";
-      const id = loc.split("/").pop();
-      if (!id) return { error: "reached server but the id header was hidden (CORS)" };
-      localStorage.setItem("etv_lb", id);
-      online = true; globalScores = [];
-      renderBoards();
-      console.log("[Escape the Void] global leaderboard id:", id);
-      return { id };
-    } catch (e) {
-      console.error("[Escape the Void] leaderboard setup failed:", e);
-      return { error: (e && e.message) || String(e) };
-    }
-  }
-  window.etvCreateLeaderboard = createLeaderboard;
-  if (setupLink) setupLink.addEventListener("click", async (e) => {
-    e.preventDefault();
-    setupLink.textContent = "Creating…";
-    const res = await createLeaderboard();
-    setupLink.style.display = "";
-    setupLink.textContent = res.id
-      ? "Global board ready ✓ — id " + res.id + " (send to dev to share for all)"
-      : "Setup failed: " + res.error + " — tap to retry";
   });
 
   renderBoards();      // initial paint (local)
