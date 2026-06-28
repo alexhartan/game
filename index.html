@@ -346,8 +346,8 @@
   const MAX_SCORES = 10;        // entries shown per board
   // Supabase project (browser-safe: the anon key is meant to ship in clients;
   // a row-level-security policy limits anon to read + validated insert only).
-  const SB_URL = "";            // <-- e.g. https://abcd1234.supabase.co
-  const SB_KEY = "";            // <-- anon public key
+  const SB_URL = "https://xjbpmtldoauswnycpfnp.supabase.co";
+  const SB_KEY = "sb_publishable_C7VaDrQaanH_vie76AynPg__T3DpoTW";  // publishable (public) key
   function lbConfigured() { return !!(SB_URL && SB_KEY); }
   function sbHeaders(extra) {
     return Object.assign({ apikey: SB_KEY, Authorization: "Bearer " + SB_KEY }, extra || {});
