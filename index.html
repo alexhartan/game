@@ -138,16 +138,24 @@
   }
   #saveBtn:hover { filter: brightness(1.08); }
 
-  .board { margin-top: 22px; width: min(380px, 88vw); }
-  .board h3 { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 8px; }
+  .board { margin-top: 22px; width: min(560px, 94vw); }
+  .board h3 { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 10px; }
+  .board .cols { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+  .board .col { flex: 1 1 0; min-width: 0; }
+  .board .col h4 { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #6a76a8; margin-bottom: 6px; text-align: center; }
   .board ol { list-style: none; padding: 0; margin: 0; }
-  .board li { display: flex; align-items: center; gap: 12px; padding: 7px 13px; border-radius: 8px; font-size: 15px; color: #cdd5ff; }
+  .board li { display: flex; align-items: center; gap: 10px; padding: 6px 11px; border-radius: 8px; font-size: 14px; color: #cdd5ff; }
   .board li:nth-child(odd) { background: rgba(120,140,255,0.05); }
   .board li.me { background: rgba(90,110,255,0.28); color: #fff; box-shadow: inset 0 0 0 1px rgba(150,170,255,0.55); }
-  .board li .rank { width: 20px; text-align: right; color: #7a86b8; font-variant-numeric: tabular-nums; }
+  .board li .rank { width: 16px; text-align: right; color: #7a86b8; font-variant-numeric: tabular-nums; font-size: 12px; }
   .board li .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .board li .tm { font-variant-numeric: tabular-nums; font-weight: 700; color: #aeb9ff; }
-  .board .empty { text-align: center; color: #6a76a8; font-size: 13px; padding: 10px; }
+  .board .empty { text-align: center; color: #6a76a8; font-size: 12px; padding: 8px 4px; }
+  @media (max-width: 440px) {
+    .board .cols { gap: 8px; }
+    .board li { gap: 6px; padding: 5px 7px; font-size: 12px; }
+    .board li .tm { font-size: 12px; }
+  }
   .lbsetup { display: inline-block; margin-top: 14px; font-size: 12px; color: #7a86b8; text-decoration: underline; cursor: pointer; }
   .lbsetup:hover { color: #aeb9ff; }
 </style>
@@ -174,7 +182,13 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
-  <div id="boardStart" class="board"><h3>Top Runs</h3><div class="list"></div></div>
+  <div id="boardStart" class="board">
+    <h3>Top Runs</h3>
+    <div class="cols">
+      <div class="col"><h4>📱 Mobile</h4><div class="list" data-dev="mobile"></div></div>
+      <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
+    </div>
+  </div>
   <a id="lbSetup" class="lbsetup" href="#">Set up a global leaderboard</a>
 </div>
 
@@ -187,7 +201,13 @@
     <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off" spellcheck="false" />
     <button id="saveBtn">Save</button>
   </div>
-  <div id="boardOver" class="board"><h3>Top Runs</h3><div class="list"></div></div>
+  <div id="boardOver" class="board">
+    <h3>Top Runs</h3>
+    <div class="cols">
+      <div class="col"><h4>📱 Mobile</h4><div class="list" data-dev="mobile"></div></div>
+      <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
+    </div>
+  </div>
   <button class="btn" id="retryBtn">Try Again</button>
 </div>
 
@@ -349,20 +369,29 @@
   const nameInput = document.getElementById("nameInput");
   const saveRow = document.getElementById("saveRow");
   const saveBtn = document.getElementById("saveBtn");
-  const boardStartList = document.querySelector("#boardStart .list");
-  const boardOverList = document.querySelector("#boardOver .list");
+  const boardStartEl = document.getElementById("boardStart");
+  const boardOverEl = document.getElementById("boardOver");
   const setupLink = document.getElementById("lbSetup");
+  // Mobile and desktop play at different aspect ratios, so they get separate
+  // ladders. Touch capability tags which one a run belongs to.
+  const DEVICE = isTouch ? "mobile" : "desktop";
 
   function fmtTime(t) { return t.toFixed(1) + "s"; }
   function currentList() { return online ? globalScores : scores; }
+  function devOf(s) { return s.dev === "mobile" ? "mobile" : "desktop"; }
+  // keep the best `per` entries of each device category
+  function trimByDev(list, per) {
+    const pick = (d) => list.filter((s) => devOf(s) === d).sort((a, b) => b.time - a.time).slice(0, per);
+    return [...pick("mobile"), ...pick("desktop")];
+  }
 
   // textContent everywhere -> player names can't inject markup
   function renderBoard(el, list, hlTs, limit) {
     el.textContent = "";
-    const top = list.slice(0, limit);
+    const top = list.slice().sort((a, b) => b.time - a.time).slice(0, limit);
     if (!top.length) {
       const d = document.createElement("div");
-      d.className = "empty"; d.textContent = "No runs yet — be the first.";
+      d.className = "empty"; d.textContent = "No runs yet.";
       el.appendChild(d); return;
     }
     const ol = document.createElement("ol");
@@ -376,6 +405,13 @@
     });
     el.appendChild(ol);
   }
+  // render the two device columns within a board
+  function renderColumns(boardEl, list, hlTs, limit) {
+    boardEl.querySelectorAll(".list").forEach((el) => {
+      const dev = el.getAttribute("data-dev");
+      renderBoard(el, list.filter((s) => devOf(s) === dev), hlTs, limit);
+    });
+  }
 
   function setBoardTitles() {
     const label = !lbConfigured() ? "Top Runs (local)"
@@ -385,8 +421,8 @@
   }
   function renderBoards(hlTs) {
     const list = currentList();
-    renderBoard(boardOverList, list, hlTs || null, MAX_SCORES);
-    renderBoard(boardStartList, list, null, 5);
+    renderColumns(boardOverEl, list, hlTs || null, MAX_SCORES);
+    renderColumns(boardStartEl, list, null, 5);
     setBoardTitles();
   }
 
@@ -404,8 +440,7 @@
     try {
       const cur = (await fetchGlobal()) || [];   // re-read so we don't clobber others
       cur.push(entry);
-      cur.sort((a, b) => b.time - a.time);
-      const trimmed = cur.slice(0, GLOBAL_KEEP);
+      const trimmed = trimByDev(cur, GLOBAL_KEEP); // keep top N of each device ladder
       const r = await fetch(lbUrl(), {
         method: "PUT",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -432,9 +467,9 @@
     if (pendingTs == null) return;
     const name = (nameInput.value.trim() || "Anonymous").slice(0, 14);
     lastName = name; localStorage.setItem("etv_name", name);
-    const entry = { name, time: pendingScore, ts: pendingTs };
-    // always keep a local copy as an offline fallback
-    scores.push(entry); scores.sort((a, b) => b.time - a.time); scores = scores.slice(0, MAX_SCORES);
+    const entry = { name, time: pendingScore, ts: pendingTs, dev: DEVICE };
+    // always keep a local copy as an offline fallback (both device ladders)
+    scores.push(entry); scores = trimByDev(scores, 25);
     localStorage.setItem("etv_scores", JSON.stringify(scores));
     saveRow.classList.add("hidden");
     if (lbConfigured()) {
@@ -453,6 +488,7 @@
   });
 
   // One-time setup: mint the shared store from this browser (no signup, no key).
+  // Returns { id } on success or { error } with the real reason for diagnosis.
   async function createLeaderboard() {
     try {
       const r = await fetch(LB_BASE, {
@@ -460,25 +496,29 @@
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({ scores: [] }),
       });
-      const loc = r.headers.get("Location") || r.url || "";
+      if (!r.ok) return { error: "server returned HTTP " + r.status };
+      const loc = r.headers.get("Location") || "";
       const id = loc.split("/").pop();
-      if (!id) return null;
+      if (!id) return { error: "reached server but the id header was hidden (CORS)" };
       localStorage.setItem("etv_lb", id);
       online = true; globalScores = [];
       renderBoards();
       console.log("[Escape the Void] global leaderboard id:", id);
-      return id;
-    } catch (_) { return null; }
+      return { id };
+    } catch (e) {
+      console.error("[Escape the Void] leaderboard setup failed:", e);
+      return { error: (e && e.message) || String(e) };
+    }
   }
   window.etvCreateLeaderboard = createLeaderboard;
   if (setupLink) setupLink.addEventListener("click", async (e) => {
     e.preventDefault();
     setupLink.textContent = "Creating…";
-    const id = await createLeaderboard();
+    const res = await createLeaderboard();
     setupLink.style.display = "";
-    setupLink.textContent = id
-      ? "Global board ready ✓ — id " + id + " (send to dev to share for all)"
-      : "Couldn't reach the server — tap to retry";
+    setupLink.textContent = res.id
+      ? "Global board ready ✓ — id " + res.id + " (send to dev to share for all)"
+      : "Setup failed: " + res.error + " — tap to retry";
   });
 
   renderBoards();      // initial paint (local)
