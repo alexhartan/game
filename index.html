@@ -19,6 +19,7 @@
     text-align: center;
     color: #e8ecff;
     z-index: 10;
+    padding: 24px; overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: radial-gradient(ellipse at center, rgba(10,12,28,0.55) 0%, rgba(5,6,12,0.88) 70%);
     cursor: default;
     user-select: none;
@@ -116,6 +117,37 @@
     box-shadow: 0 4px 18px rgba(40,60,200,0.5), inset 0 1px 0 rgba(255,255,255,0.4);
     transform: translate(0px, 0px);
   }
+
+  /* Leaderboard + name save */
+  #saveRow { margin-top: 22px; display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  #saveRow.hidden { display: none; }
+  #nameInput {
+    padding: 11px 15px; font-size: 16px; border-radius: 10px;
+    border: 1px solid rgba(150,170,255,0.4); background: rgba(20,24,48,0.85);
+    color: #fff; width: min(220px, 56vw); outline: none;
+    user-select: text; -webkit-user-select: text;
+  }
+  #nameInput:focus { border-color: #6f8bff; box-shadow: 0 0 0 3px rgba(80,100,255,0.25); }
+  #nameInput::placeholder { color: #6a76a8; }
+  #saveBtn {
+    padding: 11px 22px; font-size: 15px; font-weight: 600; letter-spacing: 0.03em;
+    color: #fff; cursor: pointer; border-radius: 10px;
+    background: linear-gradient(180deg, #4a5cff, #2a37c8);
+    border: 1px solid rgba(150,170,255,0.5);
+    box-shadow: 0 6px 20px rgba(60,80,255,0.35);
+  }
+  #saveBtn:hover { filter: brightness(1.08); }
+
+  .board { margin-top: 22px; width: min(380px, 88vw); }
+  .board h3 { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 8px; }
+  .board ol { list-style: none; padding: 0; margin: 0; }
+  .board li { display: flex; align-items: center; gap: 12px; padding: 7px 13px; border-radius: 8px; font-size: 15px; color: #cdd5ff; }
+  .board li:nth-child(odd) { background: rgba(120,140,255,0.05); }
+  .board li.me { background: rgba(90,110,255,0.28); color: #fff; box-shadow: inset 0 0 0 1px rgba(150,170,255,0.55); }
+  .board li .rank { width: 20px; text-align: right; color: #7a86b8; font-variant-numeric: tabular-nums; }
+  .board li .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board li .tm { font-variant-numeric: tabular-nums; font-weight: 700; color: #aeb9ff; }
+  .board .empty { text-align: center; color: #6a76a8; font-size: 13px; padding: 10px; }
 </style>
 </head>
 <body>
@@ -140,6 +172,7 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
+  <div id="boardStart" class="board"><h3>Top Runs</h3><div class="list"></div></div>
 </div>
 
 <div id="overlayOver" class="overlay hidden">
@@ -147,6 +180,11 @@
   <div class="stat-big" id="finalTime">0.0s</div>
   <div class="stat-label">Survived</div>
   <div class="best" id="bestLine"></div>
+  <div id="saveRow" class="hidden">
+    <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off" spellcheck="false" />
+    <button id="saveBtn">Save</button>
+  </div>
+  <div id="boardOver" class="board"><h3>Top Runs</h3><div class="list"></div></div>
   <button class="btn" id="retryBtn">Try Again</button>
 </div>
 
@@ -218,11 +256,13 @@
     ArrowRight: "right", KeyD: "right",
   };
   window.addEventListener("keydown", (e) => {
+    if (e.target && e.target.tagName === "INPUT") return;  // let the name field type
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); }
     else if ((e.code === "Enter" || e.code === "Space") && !running) { e.preventDefault(); start(); }
   });
   window.addEventListener("keyup", (e) => {
+    if (e.target && e.target.tagName === "INPUT") return;
     const k = KEYMAP[e.code];
     if (k) { keys[k] = false; e.preventDefault(); }
   });
@@ -268,6 +308,69 @@
     joyEl.addEventListener("pointerup", endJoy);
     joyEl.addEventListener("pointercancel", endJoy);
   }
+
+  // ---- Leaderboard (local, no signup) ----
+  const MAX_SCORES = 10;
+  function loadScores() {
+    try { return JSON.parse(localStorage.getItem("etv_scores") || "[]"); } catch (_) { return []; }
+  }
+  let scores = loadScores();
+  let lastName = localStorage.getItem("etv_name") || "";
+  let pendingTs = null, pendingScore = 0;
+
+  const nameInput = document.getElementById("nameInput");
+  const saveRow = document.getElementById("saveRow");
+  const saveBtn = document.getElementById("saveBtn");
+  const boardStartList = document.querySelector("#boardStart .list");
+  const boardOverList = document.querySelector("#boardOver .list");
+
+  function fmtTime(t) { return t.toFixed(1) + "s"; }
+  // textContent everywhere -> player names can't inject markup
+  function renderBoard(el, hlTs, limit) {
+    el.textContent = "";
+    const top = scores.slice(0, limit);
+    if (!top.length) {
+      const d = document.createElement("div");
+      d.className = "empty"; d.textContent = "No runs yet — be the first.";
+      el.appendChild(d); return;
+    }
+    const ol = document.createElement("ol");
+    top.forEach((s, i) => {
+      const li = document.createElement("li");
+      if (hlTs && s.ts === hlTs) li.className = "me";
+      const r = document.createElement("span"); r.className = "rank"; r.textContent = i + 1;
+      const n = document.createElement("span"); n.className = "nm"; n.textContent = s.name;
+      const t = document.createElement("span"); t.className = "tm"; t.textContent = fmtTime(s.time);
+      li.append(r, n, t); ol.appendChild(li);
+    });
+    el.appendChild(ol);
+  }
+
+  function offerSave(score) {
+    pendingScore = score; pendingTs = Date.now();
+    nameInput.value = lastName;
+    saveRow.classList.remove("hidden");
+    renderBoard(boardOverList, null, MAX_SCORES);
+  }
+  function commitSave() {
+    if (pendingTs == null) return;
+    const name = (nameInput.value.trim() || "Anonymous").slice(0, 14);
+    lastName = name; localStorage.setItem("etv_name", name);
+    scores.push({ name, time: pendingScore, ts: pendingTs });
+    scores.sort((a, b) => b.time - a.time);
+    scores = scores.slice(0, MAX_SCORES);
+    localStorage.setItem("etv_scores", JSON.stringify(scores));
+    saveRow.classList.add("hidden");
+    renderBoard(boardOverList, pendingTs, MAX_SCORES);
+    renderBoard(boardStartList, null, 5);
+    pendingTs = null;
+  }
+  if (saveBtn) saveBtn.addEventListener("click", commitSave);
+  if (nameInput) nameInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); commitSave(); }
+    e.stopPropagation();
+  });
+  renderBoard(boardStartList, null, 5);
 
   // ---- Black holes ----
   function spawnHole() {
@@ -340,6 +443,9 @@
   function start() {
     reset();
     joyReset();
+    saveRow.classList.add("hidden");
+    pendingTs = null;
+    nameInput.blur();   // drop focus so game keys aren't swallowed by the field
     document.getElementById("overlayStart").classList.add("hidden");
     document.getElementById("overlayOver").classList.add("hidden");
     document.getElementById("hud").classList.remove("hidden");
@@ -361,6 +467,7 @@
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
     document.getElementById("bestLine").textContent =
       (elapsed >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
+    offerSave(elapsed);   // prompt for a name and show the leaderboard
     document.getElementById("hud").classList.add("hidden");
     // brief delay so the burst is visible before the overlay fades in
     setTimeout(() => {
