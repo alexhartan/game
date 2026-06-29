@@ -326,7 +326,7 @@
 
   // ---- Config ----
   const GRID_SPACING = 30;        // px between grid dots (half again the density)
-  const GRID_OVERFLOW = 0.04;     // mesh extends just barely past each edge
+  const GRID_OVERFLOW = 0;        // mesh does not extend past the viewport edges
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 780;       // player thrust from WASD/arrows (px/s^2)
   const GRAV_STRENGTH = 620;      // base pull of a void
@@ -337,9 +337,9 @@
 
   // ---- Powerups (all timings are editable globals) ----
   const POWERUP_DURATION = 7.5;   // seconds an activated powerup runs
-  const POWERUP_LINGER = 15;      // seconds a pickup waits on the field before vanishing
-  const POWERUP_FIRST = 1.5;      // first pickup appears at this × the void interval
-  const POWERUP_EVERY = 1.0;      // then every this × the void interval
+  const POWERUP_LINGER = 30;      // seconds a pickup lingers on the field (long, for testing)
+  const POWERUP_FIRST = 5;        // first pickup appears this many seconds in (same in both modes)
+  const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
   const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
   const POWERUPS = {
     timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷" },
@@ -704,7 +704,7 @@
     held = null;
     active = null;
     powerupClock = 0;
-    nextPowerupAt = POWERUP_FIRST * spawnInterval();
+    nextPowerupAt = POWERUP_FIRST;
     updateSlot();
     ship.x = W / 2; ship.y = H / 2; ship.vx = 0; ship.vy = 0; ship.angle = -Math.PI / 2;
     keys.up = keys.down = keys.left = keys.right = false;
@@ -809,7 +809,7 @@
     spawnTimer += sdt;
     if (spawnTimer >= spawnInterval()) { spawnTimer -= spawnInterval(); spawnHole(); }
     powerupClock += sdt;
-    if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY * spawnInterval(); }
+    if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY; }
 
     for (const h of holes) {
       h.grow = Math.min(1, h.grow + sdt * 1.2); // ease in pull when born
