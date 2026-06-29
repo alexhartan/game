@@ -128,20 +128,26 @@
   /* in joystick mode the D-pad is hidden (the whole screen becomes the stick) */
   body.touch.ctrl-stick #dpad { display: none; }
 
-  /* control-mode toggle — touch only */
-  #ctrlChoice { display: none; margin-top: 20px; align-items: center; gap: 8px; }
+  /* segmented toggles (difficulty + control mode) */
+  #diffChoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
+  #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
   body.touch #ctrlChoice { display: inline-flex; }
-  #ctrlChoice .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
-  #ctrlChoice .ccbtn {
+  .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
+  .ccbtn {
     padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
     color: #aab4e6; background: rgba(30,36,72,0.7);
     border: 1px solid rgba(150,170,255,0.28); border-radius: 999px;
     -webkit-tap-highlight-color: transparent;
   }
-  #ctrlChoice .ccbtn.active {
+  .ccbtn.active {
     color: #fff; background: linear-gradient(180deg, #4a5cff, #2a37c8);
     border-color: rgba(150,170,255,0.5); box-shadow: 0 4px 14px rgba(60,80,255,0.35);
   }
+  #diffChoice .ccbtn.active[data-mode="easy"] {
+    background: linear-gradient(180deg, #2fbf71, #1d8a4f); border-color: rgba(120,255,180,0.5);
+    box-shadow: 0 4px 14px rgba(40,200,120,0.35);
+  }
+  #diffNote { margin-top: 10px; font-size: 12px; color: #6ad29a; min-height: 14px; }
 
   /* Leaderboard + name save */
   #saveRow { margin-top: 22px; display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
@@ -212,6 +218,12 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
+  <div id="diffChoice">
+    <span class="cclabel">Mode</span>
+    <button class="ccbtn" data-mode="normal">Normal</button>
+    <button class="ccbtn" data-mode="easy">Easy</button>
+  </div>
+  <div id="diffNote"></div>
   <div id="ctrlChoice">
     <span class="cclabel">Controls</span>
     <button class="ccbtn" data-mode="keys">Arrow Keys</button>
@@ -368,6 +380,33 @@
     });
   }
   window.addEventListener("blur", clearInput);
+
+  // ---- Difficulty: "normal" or "easy" (gentler, and never records scores) ----
+  let difficulty = localStorage.getItem("etv_diff") || "normal";
+  const EASY = {
+    grav: 0.5,        // half the pull
+    thrust: 1.3,      // stronger engines
+    spawn: 17,        // seconds between voids (vs 10)
+    returnLimit: 9,   // longer to fly back on-screen (vs 5)
+  };
+  function isEasy() { return difficulty === "easy"; }
+  function spawnInterval() { return isEasy() ? EASY.spawn : SPAWN_INTERVAL; }
+  function returnLimit() { return isEasy() ? EASY.returnLimit : RETURN_LIMIT; }
+  function thrustAccel() { return THRUST_ACCEL * (isEasy() ? EASY.thrust : 1); }
+  function gravFactor() { return isEasy() ? EASY.grav : 1; }
+  const diffChoice = document.getElementById("diffChoice");
+  const diffNote = document.getElementById("diffNote");
+  function applyDiff() {
+    if (diffChoice) diffChoice.querySelectorAll(".ccbtn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.mode === difficulty));
+    if (diffNote) diffNote.textContent = isEasy() ? "Practice mode — scores aren't saved" : "";
+  }
+  if (diffChoice) diffChoice.querySelectorAll(".ccbtn").forEach((b) => {
+    b.addEventListener("click", () => {
+      difficulty = b.dataset.mode; localStorage.setItem("etv_diff", difficulty); applyDiff();
+    });
+  });
+  applyDiff();
 
   // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
   let controlMode = localStorage.getItem("etv_ctrl") || "keys";
@@ -582,7 +621,7 @@
       const dx = h.x - px, dy = h.y - py;
       let r = Math.hypot(dx, dy);
       if (r < h.core) r = h.core;           // clamp at the horizon to avoid blow-up
-      const f = h.str * h.grow * Math.log(1 + (GRAV_SCALE * SC) / r);
+      const f = h.str * gravFactor() * h.grow * Math.log(1 + (GRAV_SCALE * SC) / r);
       ax += (dx / r) * f;
       ay += (dy / r) * f;
     }
@@ -639,11 +678,19 @@
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
     clearInput();
-    if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
-    document.getElementById("bestLine").textContent =
-      (elapsed >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
-    offerSave(elapsed);   // prompt for a name and show the leaderboard
+    if (isEasy()) {
+      // practice run: never touch best score or the leaderboard
+      document.getElementById("bestLine").textContent = "Practice mode — not saved";
+      saveRow.classList.add("hidden");
+      pendingTs = null;
+      renderBoards();
+    } else {
+      if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
+      document.getElementById("bestLine").textContent =
+        (elapsed >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
+      offerSave(elapsed);   // prompt for a name and show the leaderboard
+    }
     document.getElementById("hud").classList.add("hidden");
     // brief delay so the burst is visible before the overlay fades in
     setTimeout(() => {
@@ -658,7 +705,7 @@
   function update(dt) {
     elapsed += dt;
     spawnTimer += dt;
-    if (spawnTimer >= SPAWN_INTERVAL) { spawnTimer -= SPAWN_INTERVAL; spawnHole(); }
+    if (spawnTimer >= spawnInterval()) { spawnTimer -= spawnInterval(); spawnHole(); }
 
     for (const h of holes) {
       h.grow = Math.min(1, h.grow + dt * 1.2); // ease in pull when born
@@ -674,8 +721,8 @@
     let m = Math.hypot(ix, iy);
     if (m > 0.001) {
       if (m > 1) { ix /= m; iy /= m; }   // partial joystick deflection = partial thrust
-      ship.vx += ix * THRUST_ACCEL * SC * dt;
-      ship.vy += iy * THRUST_ACCEL * SC * dt;
+      ship.vx += ix * thrustAccel() * SC * dt;
+      ship.vy += iy * thrustAccel() * SC * dt;
       ship.angle = Math.atan2(iy, ix);
       thrusting = true;
     }
@@ -696,7 +743,7 @@
     const offscreen = ship.x < 0 || ship.x > W || ship.y < 0 || ship.y > H;
     if (offscreen) {
       offT += dt;
-      if (offT >= RETURN_LIMIT) { gameOver("escaped"); return; }
+      if (offT >= returnLimit()) { gameOver("escaped"); return; }
     } else {
       offT = 0;
     }
@@ -972,7 +1019,7 @@
       document.getElementById("hudHoles").textContent = holes.length;
       const ret = document.getElementById("return");
       if (running && offT > 0) {
-        document.getElementById("returnNum").textContent = Math.ceil(RETURN_LIMIT - offT);
+        document.getElementById("returnNum").textContent = Math.ceil(returnLimit() - offT);
         ret.style.opacity = "1";
       } else {
         ret.style.opacity = "0";
