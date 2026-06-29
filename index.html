@@ -125,6 +125,23 @@
   }
   /* lift the danger banner above the keys on touch screens */
   body.touch #warn { bottom: 200px; }
+  /* in joystick mode the D-pad is hidden (the whole screen becomes the stick) */
+  body.touch.ctrl-stick #dpad { display: none; }
+
+  /* control-mode toggle — touch only */
+  #ctrlChoice { display: none; margin-top: 20px; align-items: center; gap: 8px; }
+  body.touch #ctrlChoice { display: inline-flex; }
+  #ctrlChoice .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
+  #ctrlChoice .ccbtn {
+    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
+    color: #aab4e6; background: rgba(30,36,72,0.7);
+    border: 1px solid rgba(150,170,255,0.28); border-radius: 999px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #ctrlChoice .ccbtn.active {
+    color: #fff; background: linear-gradient(180deg, #4a5cff, #2a37c8);
+    border-color: rgba(150,170,255,0.5); box-shadow: 0 4px 14px rgba(60,80,255,0.35);
+  }
 
   /* Leaderboard + name save */
   #saveRow { margin-top: 22px; display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
@@ -195,6 +212,11 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
+  <div id="ctrlChoice">
+    <span class="cclabel">Controls</span>
+    <button class="ccbtn" data-mode="keys">Arrow Keys</button>
+    <button class="ccbtn" data-mode="stick">Joystick</button>
+  </div>
   <div id="boardStart" class="board">
     <h3>Top Runs</h3>
     <div class="cols">
@@ -323,8 +345,12 @@
   const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
   if (isTouch) document.body.classList.add("touch");
   const dpad = document.getElementById("dpad");
-  function clearDpad() {
+  // Floating joystick state (stick mode): anchored wherever the finger lands.
+  const joy = { active: false, x: 0, y: 0, id: null, ox: 0, oy: 0, px: 0, py: 0 };
+  function joyR() { return Math.max(48, Math.min(W, H) * 0.13); }
+  function clearInput() {
     keys.up = keys.down = keys.left = keys.right = false;
+    joy.active = false; joy.x = 0; joy.y = 0; joy.id = null;
     if (dpad) dpad.querySelectorAll(".key.pressed").forEach((k) => k.classList.remove("pressed"));
   }
   if (dpad) {
@@ -341,7 +367,43 @@
       kEl.addEventListener("pointercancel", release);
     });
   }
-  window.addEventListener("blur", clearDpad);
+  window.addEventListener("blur", clearInput);
+
+  // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
+  let controlMode = localStorage.getItem("etv_ctrl") || "keys";
+  const ctrlChoice = document.getElementById("ctrlChoice");
+  function applyCtrlMode() {
+    document.body.classList.toggle("ctrl-stick", controlMode === "stick");
+    if (ctrlChoice) ctrlChoice.querySelectorAll(".ccbtn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.mode === controlMode));
+  }
+  if (ctrlChoice) ctrlChoice.querySelectorAll(".ccbtn").forEach((b) => {
+    b.addEventListener("click", () => {
+      controlMode = b.dataset.mode; localStorage.setItem("etv_ctrl", controlMode);
+      clearInput(); applyCtrlMode();
+    });
+  });
+  applyCtrlMode();
+
+  // Floating joystick: touch anywhere on the playfield to anchor it, drag to steer.
+  function stickActive() { return running && controlMode === "stick"; }
+  window.addEventListener("pointerdown", (e) => {
+    if (!stickActive() || joy.active) return;
+    if (e.target && e.target.closest && e.target.closest(".overlay, #dpad, #saveRow")) return;
+    joy.active = true; joy.id = e.pointerId;
+    joy.ox = joy.px = e.clientX; joy.oy = joy.py = e.clientY; joy.x = 0; joy.y = 0;
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!joy.active || e.pointerId !== joy.id) return;
+    joy.px = e.clientX; joy.py = e.clientY;
+    let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy;
+    const d = Math.hypot(dx, dy), R = joyR();
+    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+    joy.x = dx / R; joy.y = dy / R;
+  });
+  const endStick = (e) => { if (e.pointerId === joy.id) { joy.active = false; joy.id = null; joy.x = 0; joy.y = 0; } };
+  window.addEventListener("pointerup", endStick);
+  window.addEventListener("pointercancel", endStick);
 
   // ---- Leaderboard (global via Supabase REST, local fallback) ----
   const MAX_SCORES = 10;        // entries shown per board
@@ -556,7 +618,7 @@
 
   function start() {
     reset();
-    clearDpad();
+    clearInput();
     saveRow.classList.add("hidden");
     pendingTs = null;
     nameInput.blur();   // drop focus so game keys aren't swallowed by the field
@@ -576,7 +638,7 @@
     document.getElementById("overTitle").textContent =
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
-    clearDpad();
+    clearInput();
     if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
     document.getElementById("bestLine").textContent =
@@ -603,13 +665,15 @@
       h.phase += h.spin * dt;
     }
 
-    // ship physics: player thrust (keys / on-screen arrows) + ever-present gravity
+    // ship physics: player thrust (keys / arrows / floating joystick) + gravity
     let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
     let iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    if (ix || iy) { const il = Math.hypot(ix, iy); ix /= il; iy /= il; } // normalize keys
+    if (joy.active && (joy.x || joy.y)) { ix = joy.x; iy = joy.y; }      // analog joystick
     let thrusting = false;
-    if (ix || iy) {
-      const il = Math.hypot(ix, iy);   // normalize so diagonals aren't faster
-      ix /= il; iy /= il;
+    let m = Math.hypot(ix, iy);
+    if (m > 0.001) {
+      if (m > 1) { ix /= m; iy /= m; }   // partial joystick deflection = partial thrust
       ship.vx += ix * THRUST_ACCEL * SC * dt;
       ship.vy += iy * THRUST_ACCEL * SC * dt;
       ship.angle = Math.atan2(iy, ix);
@@ -861,6 +925,21 @@
     ctx.textAlign = "left";
   }
 
+  // subtle ring + knob shown only while the floating joystick is being dragged
+  function drawStick() {
+    if (!(running && controlMode === "stick" && joy.active)) return;
+    const R = joyR();
+    let dx = joy.px - joy.ox, dy = joy.py - joy.oy;
+    const d = Math.hypot(dx, dy);
+    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
+    ctx.save();
+    ctx.strokeStyle = "rgba(150,170,255,0.45)"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(joy.ox, joy.oy, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "rgba(140,170,255,0.55)";
+    ctx.beginPath(); ctx.arc(joy.ox + dx, joy.oy + dy, R * 0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
   function render() {
     ctx.save();
     if (shake > 0) {
@@ -878,6 +957,7 @@
     if (running) { drawShip(); drawOffscreenIndicator(); }
 
     ctx.restore();
+    drawStick();   // screen-space UI, drawn outside the shake transform
   }
 
   // ---- Main loop ----
