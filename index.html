@@ -98,10 +98,11 @@
     50% { transform: scale(1.13); opacity: 1; }
   }
 
-  /* On-screen arrow keys (touch only) — styled like physical keycaps */
+  /* On-screen arrow keys (touch only) — keycaps, pinned right to leave room
+     for the powerup slot in the bottom-left corner */
   #dpad {
-    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
-    width: 56vw; max-width: 420px; min-width: 230px;
+    position: fixed; right: 16px; bottom: 22px;
+    width: 50vw; max-width: 350px; min-width: 210px;
     z-index: 8; display: none; touch-action: none;
     user-select: none; -webkit-user-select: none;
   }
@@ -127,6 +128,26 @@
   body.touch #warn { bottom: 200px; }
   /* in joystick mode the D-pad is hidden (the whole screen becomes the stick) */
   body.touch.ctrl-stick #dpad { display: none; }
+
+  /* Powerup slot (bottom-left). Tap on touch / SPACE on desktop to activate. */
+  #slot {
+    position: fixed; left: 18px; bottom: 22px; z-index: 9;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+  }
+  #slot.hidden { display: none; }
+  #slotIcon {
+    width: 64px; height: 64px; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px; font-weight: 800; line-height: 1;
+    background: rgba(8,10,20,0.82); border: 2px solid #fff;
+    animation: slotpulse 1.1s ease-in-out infinite;
+  }
+  #slotHint {
+    font-size: 10px; letter-spacing: 0.18em; color: #8a93bd; font-weight: 700;
+  }
+  @keyframes slotpulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
 
   /* segmented toggles (difficulty + control mode) */
   .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
@@ -193,7 +214,7 @@
 <canvas id="game"></canvas>
 
 <div id="hud" class="hidden">
-  <div class="item"><div class="v" id="hudTime">0.0</div><div class="l">Time</div></div>
+  <div class="item"><div class="v" id="hudTime">0.0</div><div class="l">Score</div></div>
   <div class="item"><div class="v" id="hudHoles">0</div><div class="l">Voids</div></div>
 </div>
 
@@ -213,10 +234,15 @@
   </div>
 </div>
 
+<div id="slot" class="hidden">
+  <div id="slotIcon"></div>
+  <div id="slotHint">SPACE</div>
+</div>
+
 <div id="overlayStart" class="overlay">
   <div class="title">Escape the Void</div>
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
-  <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
+  <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.<br>Fly into powerups to collect them, then trigger with <b>SPACE</b> (tap the icon on mobile).</div>
   <button class="btn" id="startBtn">Launch</button>
   <div id="diffChoice" class="diffchoice">
     <span class="cclabel">Mode</span>
@@ -309,13 +335,40 @@
   // No medium drag: momentum is conserved. Only gravity and your thrust change
   // velocity, so with the right tangential speed you can settle into an orbit.
 
+  // ---- Powerups (all timings are editable globals) ----
+  const POWERUP_DURATION = 7.5;   // seconds an activated powerup runs
+  const POWERUP_LINGER = 15;      // seconds a pickup waits on the field before vanishing
+  const POWERUP_FIRST = 1.5;      // first pickup appears at this × the void interval
+  const POWERUP_EVERY = 1.0;      // then every this × the void interval
+  const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
+  const POWERUPS = {
+    timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷" },
+    boost:    { name: "Boost",        color: "#ff8a3d", glyph: "»" },
+    nerf:     { name: "Reduced Pull", color: "#a855f7", glyph: "◑" },
+    shield:   { name: "Shield",       color: "#34d399", glyph: "✚" },
+    berserk:  { name: "Berserker",    color: "#ef4444", glyph: "✕" },
+    ghost:    { name: "Ghost",        color: "#dfe3ee", glyph: "◌" },
+    timeout:  { name: "Time-Out",     color: "#3b82f6", glyph: "‖" },
+    reverse:  { name: "Reverse Pull", color: "#eab308", glyph: "⇄" },
+    score2x:  { name: "2× Score",     color: "#ec4899", glyph: "2" },
+  };
+  const POWERUP_KEYS = Object.keys(POWERUPS);
+
   // ---- State ----
   let running = false;
   let lastT = 0;
   let elapsed = 0;
+  let score = 0;                 // headline / leaderboard value (2x during 2× Score)
   let spawnTimer = 0;
   let offT = 0;                  // seconds spent continuously off-screen
   let best = parseFloat(localStorage.getItem("etv_best") || "0") || 0;
+
+  let powerups = [];             // pickups currently on the field
+  let held = null;               // powerup key sitting in your slot
+  let active = null;             // { type, t } currently-running buff (one at a time)
+  let powerupClock = 0;          // scaled game-time accumulator for scheduling pickups
+  let nextPowerupAt = 0;
+  function isActive(type) { return !!active && active.type === type; }
 
   const keys = { up: false, down: false, left: false, right: false };
   const ship = { x: W / 2, y: H / 2, vx: 0, vy: 0, angle: -Math.PI / 2 };
@@ -333,8 +386,9 @@
   window.addEventListener("keydown", (e) => {
     if (e.target && e.target.tagName === "INPUT") return;  // let the name field type
     const k = KEYMAP[e.code];
-    if (k) { keys[k] = true; e.preventDefault(); }
-    else if ((e.code === "Enter" || e.code === "Space") && !running) { e.preventDefault(); start(); }
+    if (k) { keys[k] = true; e.preventDefault(); return; }
+    if (e.code === "Space") { e.preventDefault(); if (running) activatePowerup(); else start(); return; }
+    if (e.code === "Enter" && !running) { e.preventDefault(); start(); }
   });
   window.addEventListener("keyup", (e) => {
     if (e.target && e.target.tagName === "INPUT") return;
@@ -421,7 +475,7 @@
   function stickActive() { return running && controlMode === "stick"; }
   window.addEventListener("pointerdown", (e) => {
     if (!stickActive() || joy.active) return;
-    if (e.target && e.target.closest && e.target.closest(".overlay, #dpad, #saveRow")) return;
+    if (e.target && e.target.closest && e.target.closest(".overlay, #dpad, #saveRow, #slot")) return;
     joy.active = true; joy.id = e.pointerId;
     joy.ox = joy.px = e.clientX; joy.oy = joy.py = e.clientY; joy.x = 0; joy.y = 0;
   });
@@ -640,11 +694,18 @@
   // ---- Lifecycle ----
   function reset() {
     elapsed = 0;
+    score = 0;
     spawnTimer = 0;
     offT = 0;
     holes = [];
     particles = [];
     shake = 0;
+    powerups = [];
+    held = null;
+    active = null;
+    powerupClock = 0;
+    nextPowerupAt = POWERUP_FIRST * spawnInterval();
+    updateSlot();
     ship.x = W / 2; ship.y = H / 2; ship.vx = 0; ship.vy = 0; ship.angle = -Math.PI / 2;
     keys.up = keys.down = keys.left = keys.right = false;
   }
@@ -672,7 +733,8 @@
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
     clearInput();
-    document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
+    held = null; active = null; powerups = []; updateSlot();
+    document.getElementById("finalTime").textContent = score.toFixed(1) + "s";
     if (isEasy()) {
       // practice run: never touch best score or the leaderboard, and hide the board
       document.getElementById("bestLine").textContent = "Practice mode — not saved";
@@ -681,10 +743,10 @@
       pendingTs = null;
     } else {
       boardOverEl.style.display = "";
-      if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
+      if (score > best) { best = score; localStorage.setItem("etv_best", String(best)); }
       document.getElementById("bestLine").textContent =
-        (elapsed >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
-      offerSave(elapsed);   // prompt for a name and show the leaderboard
+        (score >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
+      offerSave(score);   // prompt for a name and show the leaderboard
     }
     document.getElementById("hud").classList.add("hidden");
     // brief delay so the burst is visible before the overlay fades in
@@ -693,19 +755,74 @@
     }, 650);
   }
 
-  if(typeof window!=="undefined") window.__spawn=(n)=>{for(let i=0;i<n;i++)spawnHole();for(const h of holes)h.grow=1;};
   document.getElementById("startBtn").addEventListener("click", start);
   document.getElementById("retryBtn").addEventListener("click", start);
 
+  // ---- Powerups ----
+  const slotEl = document.getElementById("slot");
+  const slotIcon = document.getElementById("slotIcon");
+  const slotHint = document.getElementById("slotHint");
+  function updateSlot() {
+    if (held) {
+      const p = POWERUPS[held];
+      slotEl.classList.remove("hidden");
+      slotIcon.textContent = p.glyph;
+      slotIcon.style.color = p.color;
+      slotIcon.style.borderColor = p.color;
+      slotIcon.style.boxShadow = `0 0 20px ${p.color}88, inset 0 0 14px ${p.color}55`;
+      slotHint.textContent = isTouch ? "TAP" : "SPACE";
+    } else {
+      slotEl.classList.add("hidden");
+    }
+  }
+  function activatePowerup() {
+    if (!held || active) return;   // one buff at a time; need something in the slot
+    active = { type: held, t: POWERUP_DURATION };
+    held = null;
+    updateSlot();
+  }
+  if (slotEl) slotEl.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); e.stopPropagation(); activatePowerup();
+  });
+
+  function spawnPowerup() {
+    const type = POWERUP_KEYS[Math.floor(Math.random() * POWERUP_KEYS.length)];
+    const m = Math.min(W, H) * 0.13;
+    powerups.push({
+      type,
+      x: m + Math.random() * (W - 2 * m),
+      y: m + Math.random() * (H - 2 * m),
+      t: POWERUP_LINGER,
+    });
+  }
+
   // ---- Update ----
   function update(dt) {
+    // active buff counts down in REAL time; Time Warp scales the *world* only
+    if (active) { active.t -= dt; if (active.t <= 0) active = null; }
+    const sdt = dt * (isActive("timewarp") ? TIMEWARP_FACTOR : 1);
+
     elapsed += dt;
-    spawnTimer += dt;
+    score += dt * (isActive("score2x") ? 2 : 1);
+
+    // void spawns + powerup pickups (both ride scaled time, so Time Warp slows them)
+    spawnTimer += sdt;
     if (spawnTimer >= spawnInterval()) { spawnTimer -= spawnInterval(); spawnHole(); }
+    powerupClock += sdt;
+    if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY * spawnInterval(); }
 
     for (const h of holes) {
-      h.grow = Math.min(1, h.grow + dt * 1.2); // ease in pull when born
-      h.phase += h.spin * dt;
+      h.grow = Math.min(1, h.grow + sdt * 1.2); // ease in pull when born
+      h.phase += h.spin * sdt;
+    }
+
+    // pickups: count down their linger, and collect any you fly into
+    const collectR = (18 + 12) * SC;
+    for (let i = powerups.length - 1; i >= 0; i--) {
+      const pu = powerups[i];
+      pu.t -= dt;
+      if (Math.hypot(pu.x - ship.x, pu.y - ship.y) < collectR) { held = pu.type; updateSlot(); powerups.splice(i, 1); }
+      else if (pu.t <= 0) powerups.splice(i, 1);
     }
 
     // ship physics: player thrust (keys / arrows / floating joystick) + gravity
@@ -717,38 +834,51 @@
     let m = Math.hypot(ix, iy);
     if (m > 0.001) {
       if (m > 1) { ix /= m; iy /= m; }   // partial joystick deflection = partial thrust
-      ship.vx += ix * thrustAccel() * SC * dt;
-      ship.vy += iy * thrustAccel() * SC * dt;
+      const tacc = thrustAccel() * (isActive("boost") ? 2 : 1) * SC;   // Boost = 2x engines
+      ship.vx += ix * tacc * sdt;
+      ship.vy += iy * tacc * sdt;
       ship.angle = Math.atan2(iy, ix);
       thrusting = true;
     }
 
+    // gravity, modified by powerups: Reduced Pull halves it, Reverse flips it,
+    // Ghost zeroes it
+    let gmult = isActive("nerf") ? 0.5 : 1;
+    if (isActive("reverse")) gmult *= -1;
+    if (isActive("ghost")) gmult = 0;
     const [gx, gy] = gravityAt(ship.x, ship.y);
-    ship.vx += gx * dt;
-    ship.vy += gy * dt;
+    ship.vx += gx * gmult * sdt;
+    ship.vy += gy * gmult * sdt;
 
     // no drag — pure momentum
-    ship.x += ship.vx * dt;
-    ship.y += ship.vy * dt;
+    ship.x += ship.vx * sdt;
+    ship.y += ship.vy * sdt;
 
     // when coasting, point the nose along travel so the drift reads clearly
     if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6 * SC) ship.angle = Math.atan2(ship.vy, ship.vx);
 
-    // no walls — fly as far out as you like, but you must return: a countdown
-    // starts the moment you leave the viewport and resets when you re-enter.
+    // off-screen re-entry timer: Time-Out pauses it (starts fresh after), Shield ignores it
     const offscreen = ship.x < 0 || ship.x > W || ship.y < 0 || ship.y > H;
     if (offscreen) {
-      offT += dt;
-      if (offT >= returnLimit()) { gameOver("escaped"); return; }
+      if (isActive("timeout")) { offT = 0; }
+      else {
+        offT += sdt;
+        if (offT >= returnLimit() && !isActive("shield")) { gameOver("escaped"); return; }
+      }
     } else {
       offT = 0;
     }
 
-    // danger / death check
+    // void proximity: death, unless Shield (survive) or Berserker (destroy it)
     let danger = false;
-    for (const h of holes) {
+    for (let n = holes.length - 1; n >= 0; n--) {
+      const h = holes[n];
       const d = Math.hypot(h.x - ship.x, h.y - ship.y);
-      if (d < h.core + 7 * SC) { gameOver(); return; }
+      if (d < h.core + 7 * SC) {
+        if (isActive("shield")) { /* survive */ }
+        else if (isActive("berserk")) { burst(h.x, h.y, "#ff8a8a", 40); shake = 12 * SC; holes.splice(n, 1); continue; }
+        else { gameOver(); return; }
+      }
       if (d < h.core + 70 * SC) danger = true;
     }
     document.getElementById("warn").style.opacity = danger ? "1" : "0";
@@ -831,6 +961,7 @@
     }
 
     // 3) redraw just those dots, displaced by every void that reaches them
+    const warpMul = isActive("nerf") ? 0.5 : 1;   // weaker warp while Reduced Pull is on
     const path = new Path2D();
     for (let bi = 0; bi < boxes.length; bi += 4) {
       const i0 = boxes[bi], i1 = boxes[bi + 1], j0 = boxes[bi + 2], j1 = boxes[bi + 3];
@@ -851,7 +982,7 @@
             dx += -vx * k - vy * sw;
             dy += -vy * k + vx * sw;
           }
-          path.rect(ox + dx - half, oy + dy - half, gDot, gDot);
+          path.rect(ox + dx * warpMul - half, oy + dy * warpMul - half, gDot, gDot);
         }
       }
     }
@@ -874,9 +1005,10 @@
   const rimSprite = makeSprite([[0, "rgba(0,0,0,1)"], [0.6, "rgba(60,40,160,0.9)"], [1, "rgba(0,0,0,0)"]], 0.41);
 
   function drawHoles() {
+    const vis = isActive("nerf") ? 0.68 : 1;   // Reduced Pull: voids look smaller
     for (const h of holes) {
       const R = h.core;
-      const Rg = h.reach * 0.55;
+      const Rg = h.reach * 0.55 * vis;
       // skip voids whose glow is fully off-screen (they still pull, just unseen)
       if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) continue;
       // accretion glow (cached sprite, scaled to this void)
@@ -891,19 +1023,19 @@
         ctx.strokeStyle = `rgba(150,120,255,${0.20 - a * 0.04})`;
         ctx.lineWidth = 2.5 * SC;
         ctx.beginPath();
-        ctx.arc(0, 0, R * (2.2 + a * 1.1), 0.2, Math.PI * 1.4);
+        ctx.arc(0, 0, R * vis * (2.2 + a * 1.1), 0.2, Math.PI * 1.4);
         ctx.stroke();
       }
       ctx.restore();
 
       // hot inner rim (cached sprite)
-      const Rr = R * 1.7;
+      const Rr = R * 1.7 * vis;
       ctx.drawImage(rimSprite, h.x - Rr, h.y - Rr, Rr * 2, Rr * 2);
 
       // pure black core
       ctx.fillStyle = "#000";
       ctx.beginPath();
-      ctx.arc(h.x, h.y, R, 0, Math.PI * 2);
+      ctx.arc(h.x, h.y, R * vis, 0, Math.PI * 2);
       ctx.fill();
     }
   }
@@ -1015,6 +1147,67 @@
     ctx.restore();
   }
 
+  // floating pickups: a colored orb + glyph, wiggling when about to vanish
+  function drawPowerups() {
+    for (const pu of powerups) {
+      const p = POWERUPS[pu.type];
+      let s = 17 * SC;
+      if (pu.t < 3) s *= 1 + 0.2 * Math.sin(performance.now() / 65);  // expiry wiggle
+      ctx.save();
+      ctx.translate(pu.x, pu.y);
+      ctx.globalAlpha = 0.45;
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 2.3);
+      g.addColorStop(0, p.color); g.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, s * 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(8,10,20,0.88)"; ctx.strokeStyle = p.color; ctx.lineWidth = 2 * SC;
+      ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = p.color;
+      ctx.font = `800 ${Math.round(s * 1.15)}px -apple-system, system-ui, sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(p.glyph, 0, s * 0.05);
+      ctx.restore();
+    }
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  }
+
+  // colored orb around the ship while a buff is active, with a depletion arc
+  function drawOrb() {
+    if (!active) return;
+    const c = POWERUPS[active.type].color;
+    const R = 24 * SC * (1 + 0.05 * Math.sin(performance.now() / 110));
+    ctx.save();
+    ctx.globalAlpha = 0.16; ctx.fillStyle = c;
+    ctx.beginPath(); ctx.arc(ship.x, ship.y, R, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.85; ctx.strokeStyle = c; ctx.lineWidth = 2 * SC;
+    ctx.beginPath(); ctx.arc(ship.x, ship.y, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.lineWidth = 3 * SC;
+    const frac = active.t / POWERUP_DURATION;
+    ctx.beginPath();
+    ctx.arc(ship.x, ship.y, R + 4 * SC, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // announce each pickup's name at the top: big briefly, then small while it lingers
+  function drawTopLabels() {
+    if (!powerups.length) return;
+    ctx.save();
+    ctx.textAlign = "center";
+    let y = 78;
+    for (const pu of powerups) {
+      const p = POWERUPS[pu.type];
+      const age = POWERUP_LINGER - pu.t;
+      const size = age < 1.6 ? 30 : 16;
+      ctx.globalAlpha = 0.96; ctx.fillStyle = p.color;
+      ctx.font = `800 ${size}px -apple-system, system-ui, sans-serif`;
+      ctx.fillText(p.name.toUpperCase(), W / 2, y);
+      y += size + 12;
+    }
+    ctx.restore();
+    ctx.textAlign = "left";
+  }
+
   function render() {
     ctx.save();
     if (shake > 0) {
@@ -1027,11 +1220,13 @@
 
     drawGrid();
     drawHoles();
+    drawPowerups();
     drawParticles();
-    if (running) { drawShip(); drawOffscreenIndicator(); }
+    if (running) { drawOrb(); drawShip(); drawOffscreenIndicator(); }
 
     ctx.restore();
     drawStick();   // screen-space UI, drawn outside the shake transform
+    if (running) drawTopLabels();
   }
 
   // ---- Main loop ----
@@ -1042,10 +1237,10 @@
 
     if (running) {
       update(dt);
-      document.getElementById("hudTime").textContent = elapsed.toFixed(1);
+      document.getElementById("hudTime").textContent = score.toFixed(1);
       document.getElementById("hudHoles").textContent = holes.length;
       const ret = document.getElementById("return");
-      if (running && offT > 0) {
+      if (running && offT > 0 && !isActive("timeout")) {
         document.getElementById("returnNum").textContent = Math.ceil(returnLimit() - offT);
         ret.style.opacity = "1";
       } else {
