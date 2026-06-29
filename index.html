@@ -298,13 +298,12 @@
   resize();
 
   // ---- Config ----
-  const GRID_SPACING = 46;        // px between grid points
+  const GRID_SPACING = 15;        // px between grid dots (3x denser than before)
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 780;       // player thrust from WASD/arrows (px/s^2)
   const GRAV_STRENGTH = 620;      // base pull of a void
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
   const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
-  const STAR_COUNT = 90;
   // No medium drag: momentum is conserved. Only gravity and your thrust change
   // velocity, so with the right tangential speed you can settle into an orbit.
 
@@ -319,21 +318,8 @@
   const keys = { up: false, down: false, left: false, right: false };
   const ship = { x: W / 2, y: H / 2, vx: 0, vy: 0, angle: -Math.PI / 2 };
   let holes = [];
-  let stars = [];
   let particles = [];
   let shake = 0;
-
-  function makeStars() {
-    stars = [];
-    for (let i = 0; i < STAR_COUNT; i++) {
-      stars.push({
-        x: Math.random() * W,
-        y: Math.random() * H,
-        z: 0.3 + Math.random() * 0.7,
-        r: Math.random() * 1.4 + 0.3,
-      });
-    }
-  }
 
   // ---- Input (keyboard thrust) ----
   const KEYMAP = {
@@ -659,7 +645,6 @@
     shake = 0;
     ship.x = W / 2; ship.y = H / 2; ship.vx = 0; ship.vy = 0; ship.angle = -Math.PI / 2;
     keys.up = keys.down = keys.left = keys.right = false;
-    makeStars();
   }
 
   function start() {
@@ -778,69 +763,36 @@
 
   // ---- Render ----
   function drawGrid() {
-    // build a displaced lattice and stroke it -> gravitational lensing look
+    // a dot at every lattice intersection, displaced by the voids (lensing).
+    // The mesh extends 50% past every edge so warping never reveals its border.
     const gs = GRID_SPACING * SC;
-    const cols = Math.ceil(W / gs) + 2;
-    const rows = Math.ceil(H / gs) + 2;
+    const x0 = -0.5 * W, y0 = -0.5 * H;
+    const cols = Math.ceil((2 * W) / gs) + 1;
+    const rows = Math.ceil((2 * H) / gs) + 1;
+    const r = Math.max(1, 1.5 * SC), half = r / 2;
 
-    // precompute displaced points
-    const pts = new Array(rows);
+    const path = new Path2D();
     for (let j = 0; j < rows; j++) {
-      pts[j] = new Array(cols);
+      const oy = y0 + j * gs;
       for (let i = 0; i < cols; i++) {
-        const ox = (i - 1) * gs;
-        const oy = (j - 1) * gs;
+        const ox = x0 + i * gs;
         let dx = 0, dy = 0;
         for (const h of holes) {
           const vx = ox - h.x, vy = oy - h.y;
           const dist = Math.hypot(vx, vy) + 0.001;
           if (dist > h.reach) continue;
-          // pull grid points toward the hole; swirl them slightly
+          // pull dots toward the hole; swirl them slightly
           const pull = (h.core * 9 * h.grow) * (1 - dist / h.reach);
           const k = pull / dist;
-          let mvx = -vx * k, mvy = -vy * k;
-          // swirl
           const sw = (h.spin * 0.35) * (1 - dist / h.reach) * h.grow;
-          const rx = -vy * sw, ry = vx * sw;
-          dx += mvx + rx;
-          dy += mvy + ry;
+          dx += -vx * k + -vy * sw;
+          dy += -vy * k + vx * sw;
         }
-        pts[j][i] = [ox + dx, oy + dy];
+        path.rect(ox + dx - half, oy + dy - half, r, r);
       }
     }
-
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(90,120,220,0.16)";
-    ctx.beginPath();
-    // horizontal lines
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        const p = pts[j][i];
-        if (i === 0) ctx.moveTo(p[0], p[1]);
-        else ctx.lineTo(p[0], p[1]);
-      }
-    }
-    // vertical lines
-    for (let i = 0; i < cols; i++) {
-      for (let j = 0; j < rows; j++) {
-        const p = pts[j][i];
-        if (j === 0) ctx.moveTo(p[0], p[1]);
-        else ctx.lineTo(p[0], p[1]);
-      }
-    }
-    ctx.stroke();
-  }
-
-  function drawStars() {
-    for (const s of stars) {
-      // parallax drift toward nearest hole pulls a bit too (subtle)
-      ctx.globalAlpha = 0.5 * s.z + 0.2;
-      ctx.fillStyle = "#aab8ff";
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(120,150,235,0.36)";
+    ctx.fill(path);
   }
 
   function drawHoles() {
@@ -1005,7 +957,6 @@
     ctx.fillStyle = "#05060c";
     ctx.fillRect(-20, -20, W + 40, H + 40);
 
-    drawStars();
     drawGrid();
     drawHoles();
     drawParticles();
@@ -1047,7 +998,6 @@
   }
 
   // initial idle render (menu background)
-  makeStars();
   render();
 })();
 </script>
