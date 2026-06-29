@@ -765,9 +765,14 @@
   }
 
   // ---- Render ----
-  // static dot lattice (rebuilt only on resize). Dots span 50% past each edge.
-  let gBaseX = null, gBaseY = null, gDX = null, gDY = null;
-  let gCols = 0, gRows = 0, gW = -1, gH = -1, gGS = -1;
+  // The undistorted dot field is pre-rendered once to an offscreen layer and
+  // blitted each frame (one cheap draw). Only the dots inside a void's reach are
+  // erased and redrawn warped — so per-frame cost is independent of total dots.
+  let gBaseX = null, gBaseY = null;
+  let gCols = 0, gRows = 0, gW = -1, gH = -1, gGS = -1, gDot = 1;
+  let gridLayer = null, glCtx = null;
+  const GRID_COLOR = "rgba(120,150,235,0.40)";
+
   function buildGridBase(gs) {
     const ofx = GRID_OVERFLOW * W, ofy = GRID_OVERFLOW * H;
     const x0 = -ofx, y0 = -ofy;
@@ -775,52 +780,82 @@
     gRows = Math.ceil((H + 2 * ofy) / gs) + 1;
     const tot = gCols * gRows;
     gBaseX = new Float64Array(tot); gBaseY = new Float64Array(tot);
-    gDX = new Float64Array(tot); gDY = new Float64Array(tot);
     for (let j = 0; j < gRows; j++) {
       const oy = y0 + j * gs;
       for (let i = 0; i < gCols; i++) { const idx = j * gCols + i; gBaseX[idx] = x0 + i * gs; gBaseY[idx] = oy; }
     }
+    gDot = Math.max(1, 1.5 * SC);
     gW = W; gH = H; gGS = gs;
+
+    // pre-render the on-screen (undistorted) dots once
+    if (!gridLayer) { gridLayer = document.createElement("canvas"); glCtx = gridLayer.getContext("2d"); }
+    gridLayer.width = Math.max(1, Math.floor(W * DPR));
+    gridLayer.height = Math.max(1, Math.floor(H * DPR));
+    glCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    glCtx.clearRect(0, 0, W, H);
+    const half = gDot / 2, lp = new Path2D();
+    for (let idx = 0; idx < tot; idx++) {
+      const x = gBaseX[idx], y = gBaseY[idx];
+      if (x < -gDot || x > W + gDot || y < -gDot || y > H + gDot) continue;
+      lp.rect(x - half, y - half, gDot, gDot);
+    }
+    glCtx.fillStyle = GRID_COLOR;
+    glCtx.fill(lp);
   }
 
   function drawGrid() {
     const gs = GRID_SPACING * SC;
     if (W !== gW || H !== gH || gs !== gGS) buildGridBase(gs);
-    const x0 = -GRID_OVERFLOW * W, y0 = -GRID_OVERFLOW * H;
-    const r = Math.max(1, 1.5 * SC), half = r / 2;
-    const tot = gCols * gRows;
 
-    // reset displacements, then only touch dots inside each void's reach box
-    gDX.fill(0); gDY.fill(0);
-    for (let n = 0; n < holes.length; n++) {
-      const h = holes[n];
-      const reach = h.reach, r2 = reach * reach;
-      const pull = h.core * 9 * h.grow, sw0 = h.spin * 0.35 * h.grow;
+    // 1) blit the whole undistorted dot field — one draw, independent of count
+    ctx.drawImage(gridLayer, 0, 0, W, H);
+    const HN = holes.length;
+    if (HN === 0) return;
+
+    const x0 = -GRID_OVERFLOW * W, y0 = -GRID_OVERFLOW * H;
+    const half = gDot / 2;
+
+    // 2) erase each void's reach box back to the background colour
+    ctx.fillStyle = "#05060c";
+    const boxes = [];
+    for (let n = 0; n < HN; n++) {
+      const h = holes[n], reach = h.reach;
       let i0 = Math.floor((h.x - reach - x0) / gs), i1 = Math.ceil((h.x + reach - x0) / gs);
       let j0 = Math.floor((h.y - reach - y0) / gs), j1 = Math.ceil((h.y + reach - y0) / gs);
       if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0;
       if (i1 > gCols - 1) i1 = gCols - 1; if (j1 > gRows - 1) j1 = gRows - 1;
+      if (i1 < i0 || j1 < j0) continue;
+      boxes.push(i0, i1, j0, j1);
+      const ex = x0 + i0 * gs - half, ey = y0 + j0 * gs - half;
+      ctx.fillRect(ex, ey, (i1 - i0) * gs + gDot, (j1 - j0) * gs + gDot);
+    }
+
+    // 3) redraw just those dots, displaced by every void that reaches them
+    const path = new Path2D();
+    for (let bi = 0; bi < boxes.length; bi += 4) {
+      const i0 = boxes[bi], i1 = boxes[bi + 1], j0 = boxes[bi + 2], j1 = boxes[bi + 3];
       for (let j = j0; j <= j1; j++) {
-        const rowOff = j * gCols;
+        const oy = y0 + j * gs;
         for (let i = i0; i <= i1; i++) {
-          const idx = rowOff + i;
-          const vx = gBaseX[idx] - h.x, vy = gBaseY[idx] - h.y;
-          const d2 = vx * vx + vy * vy;
-          if (d2 > r2) continue;
-          const dist = Math.sqrt(d2) + 0.001;
-          const t = 1 - dist / reach;
-          const k = pull * t / dist, sw = sw0 * t;
-          gDX[idx] += -vx * k - vy * sw;
-          gDY[idx] += -vy * k + vx * sw;
+          const ox = x0 + i * gs;
+          let dx = 0, dy = 0;
+          for (let n = 0; n < HN; n++) {
+            const h = holes[n];
+            const vx = ox - h.x, vy = oy - h.y;
+            const reach = h.reach, d2 = vx * vx + vy * vy;
+            if (d2 > reach * reach) continue;
+            const dist = Math.sqrt(d2) + 0.001;
+            const t = 1 - dist / reach;
+            const k = (h.core * 9 * h.grow) * t / dist;
+            const sw = (h.spin * 0.35 * h.grow) * t;
+            dx += -vx * k - vy * sw;
+            dy += -vy * k + vx * sw;
+          }
+          path.rect(ox + dx - half, oy + dy - half, gDot, gDot);
         }
       }
     }
-
-    const path = new Path2D();
-    for (let idx = 0; idx < tot; idx++) {
-      path.rect(gBaseX[idx] + gDX[idx] - half, gBaseY[idx] + gDY[idx] - half, r, r);
-    }
-    ctx.fillStyle = "rgba(120,150,235,0.36)";
+    ctx.fillStyle = GRID_COLOR;
     ctx.fill(path);
   }
 
