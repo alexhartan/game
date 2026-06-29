@@ -278,7 +278,8 @@
   const REF = Math.sqrt(1100 * 720);
   function resize() {
     const oldW = W, oldH = H, oldSC = SC;
-    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    // cap pixel ratio: fill cost scales with DPR^2, and the glows are fill-heavy
+    DPR = Math.min(window.devicePixelRatio || 1, 1.5);
     W = window.innerWidth;
     H = window.innerHeight;
     canvas.width = Math.floor(W * DPR);
@@ -298,7 +299,8 @@
   resize();
 
   // ---- Config ----
-  const GRID_SPACING = 15;        // px between grid dots (3x denser than before)
+  const GRID_SPACING = 15;        // px between grid dots (3x denser than the old 46)
+  const GRID_OVERFLOW = 0.5;      // fraction of the screen the mesh extends past each edge
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 780;       // player thrust from WASD/arrows (px/s^2)
   const GRAV_STRENGTH = 620;      // base pull of a void
@@ -691,6 +693,7 @@
     }, 650);
   }
 
+  if(typeof window!=="undefined") window.__spawn=(n)=>{for(let i=0;i<n;i++)spawnHole();for(const h of holes)h.grow=1;};
   document.getElementById("startBtn").addEventListener("click", start);
   document.getElementById("retryBtn").addEventListener("click", start);
 
@@ -762,51 +765,87 @@
   }
 
   // ---- Render ----
+  // static dot lattice (rebuilt only on resize). Dots span 50% past each edge.
+  let gBaseX = null, gBaseY = null, gDX = null, gDY = null;
+  let gCols = 0, gRows = 0, gW = -1, gH = -1, gGS = -1;
+  function buildGridBase(gs) {
+    const ofx = GRID_OVERFLOW * W, ofy = GRID_OVERFLOW * H;
+    const x0 = -ofx, y0 = -ofy;
+    gCols = Math.ceil((W + 2 * ofx) / gs) + 1;
+    gRows = Math.ceil((H + 2 * ofy) / gs) + 1;
+    const tot = gCols * gRows;
+    gBaseX = new Float64Array(tot); gBaseY = new Float64Array(tot);
+    gDX = new Float64Array(tot); gDY = new Float64Array(tot);
+    for (let j = 0; j < gRows; j++) {
+      const oy = y0 + j * gs;
+      for (let i = 0; i < gCols; i++) { const idx = j * gCols + i; gBaseX[idx] = x0 + i * gs; gBaseY[idx] = oy; }
+    }
+    gW = W; gH = H; gGS = gs;
+  }
+
   function drawGrid() {
-    // a dot at every lattice intersection, displaced by the voids (lensing).
-    // The mesh extends 50% past every edge so warping never reveals its border.
     const gs = GRID_SPACING * SC;
-    const x0 = -0.5 * W, y0 = -0.5 * H;
-    const cols = Math.ceil((2 * W) / gs) + 1;
-    const rows = Math.ceil((2 * H) / gs) + 1;
+    if (W !== gW || H !== gH || gs !== gGS) buildGridBase(gs);
+    const x0 = -GRID_OVERFLOW * W, y0 = -GRID_OVERFLOW * H;
     const r = Math.max(1, 1.5 * SC), half = r / 2;
+    const tot = gCols * gRows;
+
+    // reset displacements, then only touch dots inside each void's reach box
+    gDX.fill(0); gDY.fill(0);
+    for (let n = 0; n < holes.length; n++) {
+      const h = holes[n];
+      const reach = h.reach, r2 = reach * reach;
+      const pull = h.core * 9 * h.grow, sw0 = h.spin * 0.35 * h.grow;
+      let i0 = Math.floor((h.x - reach - x0) / gs), i1 = Math.ceil((h.x + reach - x0) / gs);
+      let j0 = Math.floor((h.y - reach - y0) / gs), j1 = Math.ceil((h.y + reach - y0) / gs);
+      if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0;
+      if (i1 > gCols - 1) i1 = gCols - 1; if (j1 > gRows - 1) j1 = gRows - 1;
+      for (let j = j0; j <= j1; j++) {
+        const rowOff = j * gCols;
+        for (let i = i0; i <= i1; i++) {
+          const idx = rowOff + i;
+          const vx = gBaseX[idx] - h.x, vy = gBaseY[idx] - h.y;
+          const d2 = vx * vx + vy * vy;
+          if (d2 > r2) continue;
+          const dist = Math.sqrt(d2) + 0.001;
+          const t = 1 - dist / reach;
+          const k = pull * t / dist, sw = sw0 * t;
+          gDX[idx] += -vx * k - vy * sw;
+          gDY[idx] += -vy * k + vx * sw;
+        }
+      }
+    }
 
     const path = new Path2D();
-    for (let j = 0; j < rows; j++) {
-      const oy = y0 + j * gs;
-      for (let i = 0; i < cols; i++) {
-        const ox = x0 + i * gs;
-        let dx = 0, dy = 0;
-        for (const h of holes) {
-          const vx = ox - h.x, vy = oy - h.y;
-          const dist = Math.hypot(vx, vy) + 0.001;
-          if (dist > h.reach) continue;
-          // pull dots toward the hole; swirl them slightly
-          const pull = (h.core * 9 * h.grow) * (1 - dist / h.reach);
-          const k = pull / dist;
-          const sw = (h.spin * 0.35) * (1 - dist / h.reach) * h.grow;
-          dx += -vx * k + -vy * sw;
-          dy += -vy * k + vx * sw;
-        }
-        path.rect(ox + dx - half, oy + dy - half, r, r);
-      }
+    for (let idx = 0; idx < tot; idx++) {
+      path.rect(gBaseX[idx] + gDX[idx] - half, gBaseY[idx] + gDY[idx] - half, r, r);
     }
     ctx.fillStyle = "rgba(120,150,235,0.36)";
     ctx.fill(path);
   }
 
+  // Pre-render the soft accretion glow once; blitting a sprite each frame is
+  // far cheaper than rebuilding a big radial gradient per void per frame.
+  function makeSprite(stops, inner) {
+    const s = 128, c = document.createElement("canvas");
+    c.width = c.height = s;
+    const g = c.getContext("2d");
+    const grd = g.createRadialGradient(s / 2, s / 2, (s / 2) * (inner || 0), s / 2, s / 2, s / 2);
+    for (const [o, col] of stops) grd.addColorStop(o, col);
+    g.fillStyle = grd; g.fillRect(0, 0, s, s);
+    return c;
+  }
+  const glowSprite = makeSprite([[0, "rgba(120,90,255,0.30)"], [0.25, "rgba(80,60,200,0.14)"], [1, "rgba(0,0,0,0)"]], 0);
+  const rimSprite = makeSprite([[0, "rgba(0,0,0,1)"], [0.6, "rgba(60,40,160,0.9)"], [1, "rgba(0,0,0,0)"]], 0.41);
+
   function drawHoles() {
     for (const h of holes) {
       const R = h.core;
-      // accretion glow
-      const glow = ctx.createRadialGradient(h.x, h.y, R * 0.5, h.x, h.y, h.reach * 0.55);
-      glow.addColorStop(0, "rgba(120,90,255,0.30)");
-      glow.addColorStop(0.25, "rgba(80,60,200,0.14)");
-      glow.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = glow;
-      ctx.beginPath();
-      ctx.arc(h.x, h.y, h.reach * 0.55, 0, Math.PI * 2);
-      ctx.fill();
+      const Rg = h.reach * 0.55;
+      // skip voids whose glow is fully off-screen (they still pull, just unseen)
+      if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) continue;
+      // accretion glow (cached sprite, scaled to this void)
+      ctx.drawImage(glowSprite, h.x - Rg, h.y - Rg, Rg * 2, Rg * 2);
 
       // swirling accretion ring
       ctx.save();
@@ -822,15 +861,9 @@
       }
       ctx.restore();
 
-      // hot inner rim
-      const rim = ctx.createRadialGradient(h.x, h.y, R * 0.7, h.x, h.y, R * 1.7);
-      rim.addColorStop(0, "rgba(0,0,0,1)");
-      rim.addColorStop(0.6, "rgba(60,40,160,0.9)");
-      rim.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = rim;
-      ctx.beginPath();
-      ctx.arc(h.x, h.y, R * 1.7, 0, Math.PI * 2);
-      ctx.fill();
+      // hot inner rim (cached sprite)
+      const Rr = R * 1.7;
+      ctx.drawImage(rimSprite, h.x - Rr, h.y - Rr, Rr * 2, Rr * 2);
 
       // pure black core
       ctx.fillStyle = "#000";
