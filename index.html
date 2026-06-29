@@ -158,6 +158,21 @@
   }
   #lives.hidden { display: none; }
 
+  /* Powerup legend on the start screen */
+  .legendwrap { margin-top: 26px; width: min(620px, 94vw); }
+  .legendtitle { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 12px; }
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
+  @media (max-width: 520px) { .legend { grid-template-columns: 1fr; } }
+  .legrow { display: flex; align-items: center; gap: 11px; text-align: left; }
+  .legicon {
+    width: 32px; height: 32px; flex: 0 0 32px; border-radius: 9px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px; font-weight: 800; line-height: 1;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+  }
+  .legname { font-size: 13px; font-weight: 700; color: #e8ecff; line-height: 1.2; }
+  .legdesc { font-size: 11px; color: #8a93bd; line-height: 1.2; }
+
   /* segmented toggles (difficulty + control mode) */
   .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
   #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
@@ -267,6 +282,10 @@
     <button class="ccbtn" data-mode="keys">Arrow Keys</button>
     <button class="ccbtn" data-mode="stick">Joystick</button>
   </div>
+  <div class="legendwrap">
+    <h3 class="legendtitle">Powerups</h3>
+    <div id="legend" class="legend"></div>
+  </div>
   <div id="boardStart" class="board">
     <h3>Top Runs</h3>
     <div class="cols">
@@ -348,7 +367,7 @@
   // velocity, so with the right tangential speed you can settle into an orbit.
 
   // ---- Powerups (all timings are editable globals) ----
-  const POWERUP_DURATION = 7.5;   // seconds an activated powerup runs
+  const POWERUP_DURATION = 10;    // seconds an activated powerup runs
   const POWERUP_LINGER = 30;      // seconds a pickup lingers on the field (long, for testing)
   const POWERUP_FIRST = 5;        // first pickup appears this many seconds in (same in both modes)
   const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
@@ -388,6 +407,7 @@
   let nextPowerupAt = 0;
   let lives = 0;                 // extra hearts (0..3); each absorbs one death
   let invuln = 0;                // brief invulnerability after spending a life (seconds)
+  let flicker = 0;               // ship blink timer after taking (absorbed) damage
   function isActive(type) { return !!active && active.type === type; }
 
   const keys = { up: false, down: false, left: false, right: false };
@@ -680,9 +700,11 @@
     };
   }
   function makePortal(x, y) {
+    const n = holes.length;
     return {
-      x, y, portal: true, str: 0,       // wormholes don't pull
-      core: 18 * SC, reach: 300 * SC,
+      x, y, portal: true,
+      str: GRAV_STRENGTH * SC * (1 + n * 0.12),   // wormholes pull as hard as a void
+      core: 18 * SC, reach: 460 * SC,
       born: elapsed, spin: (Math.random() < 0.5 ? -1 : 1) * 1.1,
       phase: Math.random() * Math.PI * 2, grow: 0,
     };
@@ -746,6 +768,7 @@
     active = null;
     lives = 0;
     invuln = 0;
+    flicker = 0;
     powerupClock = 0;
     nextPowerupAt = POWERUP_FIRST;
     updateSlot();
@@ -777,7 +800,7 @@
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
     clearInput();
-    held = null; active = null; powerups = []; lives = 0; invuln = 0; updateSlot(); updateLives();
+    held = null; active = null; powerups = []; lives = 0; invuln = 0; flicker = 0; updateSlot(); updateLives();
     document.getElementById("finalTime").textContent = score.toFixed(1) + "s";
     if (isEasy()) {
       // practice run: never touch best score or the leaderboard, and hide the board
@@ -809,7 +832,7 @@
   const slotHint = document.getElementById("slotHint");
   const livesEl = document.getElementById("lives");
   // shield drawn as an actual shield, not a "+"
-  const SHIELD_SVG = (c) => `<svg viewBox="0 0 24 24" width="40" height="40" fill="${c}"><path d="M12 1.5 L3.8 4.4 V11 C3.8 16.6 7.6 20.7 12 22.4 C16.4 20.7 20.2 16.6 20.2 11 V4.4 Z"/></svg>`;
+  const SHIELD_SVG = (c, sz = 40) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="${c}"><path d="M12 1.5 L3.8 4.4 V11 C3.8 16.6 7.6 20.7 12 22.4 C16.4 20.7 20.2 16.6 20.2 11 V4.4 Z"/></svg>`;
   function updateSlot() {
     if (held) {
       const p = POWERUPS[held];
@@ -829,6 +852,28 @@
     if (lives > 0) { livesEl.classList.remove("hidden"); livesEl.textContent = "♥".repeat(lives); }
     else livesEl.classList.add("hidden");
   }
+  // start-screen legend so players can learn the powerups (symbols + colors)
+  function buildLegend() {
+    const legend = document.getElementById("legend");
+    if (!legend) return;
+    const entries = POWERUP_SPAWN_KEYS.map((k) => ({ key: k, ...POWERUPS[k] }));
+    entries.push({ key: "wormhole", name: "Wormhole", color: "#f4f0ff", desc: "Pulls you in, then teleports you to a fresh map (momentum kept)" });
+    legend.innerHTML = "";
+    for (const e of entries) {
+      const row = document.createElement("div"); row.className = "legrow";
+      const icon = document.createElement("div"); icon.className = "legicon";
+      if (e.key === "shield") icon.innerHTML = SHIELD_SVG(e.color, 22);
+      else if (e.key === "wormhole") icon.innerHTML = `<span style="width:16px;height:16px;border-radius:50%;background:#f4f0ff;border:2px solid ${PORTAL_EDGE};display:inline-block;"></span>`;
+      else { icon.textContent = e.glyph; icon.style.color = e.color; }
+      const txt = document.createElement("div");
+      const nm = document.createElement("div"); nm.className = "legname"; nm.textContent = e.name;
+      const ds = document.createElement("div"); ds.className = "legdesc"; ds.textContent = e.desc;
+      txt.append(nm, ds);
+      row.append(icon, txt);
+      legend.appendChild(row);
+    }
+  }
+  buildLegend();
   function activatePowerup() {
     if (!held || active) return;   // one buff at a time; need something in the slot
     active = { type: held, t: POWERUP_DURATION };
@@ -860,6 +905,7 @@
     // active buff counts down in REAL time; Time Warp scales the *world* only
     if (active) { active.t -= dt; if (active.t <= 0) active = null; }
     if (invuln > 0) invuln -= dt;
+    if (flicker > 0) flicker -= dt;
     const sdt = dt * (isActive("timewarp") ? TIMEWARP_FACTOR : 1);
 
     elapsed += dt;
@@ -877,7 +923,7 @@
     }
 
     // pickups: count down their linger; nearby ones are magnetised in and absorbed
-    const collectR = (26 + 18) * SC, magR = MAGNET_RADIUS * SC;
+    const collectR = (17 + 14) * SC, magR = MAGNET_RADIUS * SC;
     for (let i = powerups.length - 1; i >= 0; i--) {
       const pu = powerups[i];
       pu.t -= dt;
@@ -936,10 +982,9 @@
       else {
         offT += sdt;
         if (offT >= returnLimit() && !isActive("shield") && invuln <= 0) {
-          if (lives > 0) {   // spend a life: snap back to centre, brief invulnerability
-            lives--; updateLives(); invuln = 1.4;
-            ship.x = W / 2; ship.y = H / 2; ship.vx = 0; ship.vy = 0; offT = 0;
-            burst(W / 2, H / 2, "#ff4d6d", 40);
+          if (lives > 0) {   // spend a life: keep momentum, reset the timer, blink
+            lives--; updateLives(); invuln = 1.4; flicker = 1.4; offT = 0;
+            burst(ship.x, ship.y, "#ff4d6d", 36);
           } else { gameOver("escaped"); return; }
         }
       }
@@ -958,12 +1003,10 @@
         continue;                                            // portals don't threaten or glow danger
       }
       if (d < h.core + 7 * SC) {
-        if (isActive("shield") || invuln > 0) { /* survive */ }
+        if (isActive("shield") || invuln > 0) { flicker = Math.max(flicker, 0.3); }  // tank it, blink
         else if (isActive("berserk")) { burst(h.x, h.y, "#ff8a8a", 40); shake = 12 * SC; holes.splice(n, 1); continue; }
-        else if (lives > 0) {   // spend a life: bounce away from the void, brief invuln
-          lives--; updateLives(); invuln = 1.4;
-          const a = Math.atan2(ship.y - h.y, ship.x - h.x);
-          ship.vx = Math.cos(a) * 380 * SC; ship.vy = Math.sin(a) * 380 * SC;
+        else if (lives > 0) {   // spend a life: keep momentum, brief invuln, blink
+          lives--; updateLives(); invuln = 1.4; flicker = 1.4;
           burst(ship.x, ship.y, "#ff4d6d", 40); shake = 14 * SC;
         } else { gameOver(); return; }
       }
@@ -1038,7 +1081,6 @@
     const boxes = [];
     for (let n = 0; n < HN; n++) {
       const h = holes[n], reach = h.reach;
-      if (h.portal) continue;   // wormholes don't lens the grid
       let i0 = Math.floor((h.x - reach - x0) / gs), i1 = Math.ceil((h.x + reach - x0) / gs);
       let j0 = Math.floor((h.y - reach - y0) / gs), j1 = Math.ceil((h.y + reach - y0) / gs);
       if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0;
@@ -1061,7 +1103,6 @@
           let dx = 0, dy = 0;
           for (let n = 0; n < HN; n++) {
             const h = holes[n];
-            if (h.portal) continue;
             const vx = ox - h.x, vy = oy - h.y;
             const reach = h.reach, d2 = vx * vx + vy * vy;
             if (d2 > reach * reach) continue;
@@ -1157,7 +1198,10 @@
   }
 
   function drawShip() {
+    // blink on/off rapidly while flickering from absorbed damage
+    const blink = flicker > 0 ? ((Math.floor(performance.now() / 70) % 2) ? 1 : 0.18) : 1;
     ctx.save();
+    ctx.globalAlpha = blink;
     ctx.translate(ship.x, ship.y);
     ctx.rotate(ship.angle);
     ctx.scale(SC, SC);   // draw the ship in fixed local units, scaled to viewport
@@ -1200,7 +1244,7 @@
     ctx.restore();
 
     // soft halo
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5 * blink;
     const halo = ctx.createRadialGradient(ship.x, ship.y, 2 * SC, ship.x, ship.y, 22 * SC);
     halo.addColorStop(0, "rgba(140,180,255,0.5)");
     halo.addColorStop(1, "rgba(140,180,255,0)");
@@ -1280,7 +1324,7 @@
   function drawPowerups() {
     for (const pu of powerups) {
       const p = POWERUPS[pu.type];
-      let s = 26 * SC;
+      let s = 17 * SC;
       if (pu.t < 3) s *= 1 + 0.2 * Math.sin(performance.now() / 65);  // expiry wiggle
       ctx.save();
       ctx.translate(pu.x, pu.y);
@@ -1327,7 +1371,8 @@
     ctx.restore();
   }
 
-  // while a buff is running: big bold name at the top, plain description under it
+  // while a buff is running: big bold name, plain description, and a countdown
+  // bar (so timing is visible even when the ship is off-screen)
   function drawActiveLabel() {
     if (!active) return;
     const p = POWERUPS[active.type];
@@ -1339,6 +1384,12 @@
     ctx.fillStyle = "rgba(222,230,255,0.85)";
     ctx.font = "400 15px -apple-system, system-ui, sans-serif";
     ctx.fillText(p.desc, W / 2, 104);
+    // countdown bar
+    const bw = 200, bh = 6, bx = W / 2 - bw / 2, by = 116;
+    ctx.fillStyle = "rgba(255,255,255,0.16)";
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(bx, by, bw * Math.max(0, active.t / POWERUP_DURATION), bh);
     ctx.restore();
     ctx.textAlign = "left";
   }
@@ -1357,18 +1408,7 @@
     drawHoles();
     drawPowerups();
     drawParticles();
-    if (running) {
-      drawOrb();
-      if (invuln > 0) {   // flashing white ring while a life-save invulnerability is up
-        ctx.save();
-        ctx.globalAlpha = 0.4 + 0.4 * Math.sin(performance.now() / 55);
-        ctx.strokeStyle = "#fff"; ctx.lineWidth = 2 * SC;
-        ctx.beginPath(); ctx.arc(ship.x, ship.y, 22 * SC, 0, Math.PI * 2); ctx.stroke();
-        ctx.restore();
-      }
-      drawShip();
-      drawOffscreenIndicator();
-    }
+    if (running) { drawOrb(); drawShip(); drawOffscreenIndicator(); }
 
     ctx.restore();
     drawStick();   // screen-space UI, drawn outside the shake transform
