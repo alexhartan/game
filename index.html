@@ -340,6 +340,7 @@
   const POWERUP_LINGER = 30;      // seconds a pickup lingers on the field (long, for testing)
   const POWERUP_FIRST = 5;        // first pickup appears this many seconds in (same in both modes)
   const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
+  const MAGNET_RADIUS = 115;      // px: within this range a pickup is pulled toward the ship
   const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
   const POWERUPS = {
     timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷" },
@@ -816,13 +817,21 @@
       h.phase += h.spin * sdt;
     }
 
-    // pickups: count down their linger, and collect any you fly into
-    const collectR = (18 + 12) * SC;
+    // pickups: count down their linger; nearby ones are magnetised in and absorbed
+    const collectR = (18 + 12) * SC, magR = MAGNET_RADIUS * SC;
     for (let i = powerups.length - 1; i >= 0; i--) {
       const pu = powerups[i];
       pu.t -= dt;
-      if (Math.hypot(pu.x - ship.x, pu.y - ship.y) < collectR) { held = pu.type; updateSlot(); powerups.splice(i, 1); }
-      else if (pu.t <= 0) powerups.splice(i, 1);
+      const dx = ship.x - pu.x, dy = ship.y - pu.y, dist = Math.hypot(dx, dy) + 0.001;
+      if (dist < collectR) { held = pu.type; updateSlot(); powerups.splice(i, 1); continue; }
+      if (dist < magR) {
+        const pull = 1 - dist / magR;                 // 0 at the edge -> 1 near the ship
+        const speed = (90 + 680 * pull) * SC;          // accelerates as it closes in
+        pu.x += (dx / dist) * speed * dt;
+        pu.y += (dy / dist) * speed * dt;
+        pu.mag = true;                                 // flag for a stretched glow while pulled
+      } else pu.mag = false;
+      if (pu.t <= 0) powerups.splice(i, 1);
     }
 
     // ship physics: player thrust (keys / arrows / floating joystick) + gravity
@@ -1155,10 +1164,10 @@
       if (pu.t < 3) s *= 1 + 0.2 * Math.sin(performance.now() / 65);  // expiry wiggle
       ctx.save();
       ctx.translate(pu.x, pu.y);
-      ctx.globalAlpha = 0.45;
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 2.3);
+      ctx.globalAlpha = pu.mag ? 0.7 : 0.45;        // brighter halo while being absorbed
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * (pu.mag ? 2.8 : 2.3));
       g.addColorStop(0, p.color); g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, s * 2.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, s * (pu.mag ? 2.8 : 2.3), 0, Math.PI * 2); ctx.fill();
       ctx.globalAlpha = 1;
       ctx.fillStyle = "rgba(8,10,20,0.88)"; ctx.strokeStyle = p.color; ctx.lineWidth = 2 * SC;
       ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
