@@ -129,7 +129,7 @@
   body.touch.ctrl-stick #dpad { display: none; }
 
   /* segmented toggles (difficulty + control mode) */
-  #diffChoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
+  .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
   #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
   body.touch #ctrlChoice { display: inline-flex; }
   .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
@@ -143,7 +143,7 @@
     color: #fff; background: linear-gradient(180deg, #4a5cff, #2a37c8);
     border-color: rgba(150,170,255,0.5); box-shadow: 0 4px 14px rgba(60,80,255,0.35);
   }
-  #diffChoice .ccbtn.active[data-mode="easy"] {
+  .diffchoice .ccbtn.active[data-mode="easy"] {
     background: linear-gradient(180deg, #2fbf71, #1d8a4f); border-color: rgba(120,255,180,0.5);
     box-shadow: 0 4px 14px rgba(40,200,120,0.35);
   }
@@ -218,7 +218,7 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.</div>
   <button class="btn" id="startBtn">Launch</button>
-  <div id="diffChoice">
+  <div id="diffChoice" class="diffchoice">
     <span class="cclabel">Mode</span>
     <button class="ccbtn" data-mode="normal">Normal</button>
     <button class="ccbtn" data-mode="easy">Easy</button>
@@ -253,6 +253,11 @@
       <div class="col"><h4>📱 Mobile</h4><div class="list" data-dev="mobile"></div></div>
       <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
     </div>
+  </div>
+  <div class="diffchoice">
+    <span class="cclabel">Mode</span>
+    <button class="ccbtn" data-mode="normal">Normal</button>
+    <button class="ccbtn" data-mode="easy">Easy</button>
   </div>
   <button class="btn" id="retryBtn">Try Again</button>
 </div>
@@ -394,18 +399,18 @@
   function returnLimit() { return isEasy() ? EASY.returnLimit : RETURN_LIMIT; }
   function thrustAccel() { return THRUST_ACCEL * (isEasy() ? EASY.thrust : 1); }
   function gravFactor() { return isEasy() ? EASY.grav : 1; }
-  const diffChoice = document.getElementById("diffChoice");
+  const diffChoices = document.querySelectorAll(".diffchoice");
   const diffNote = document.getElementById("diffNote");
   function applyDiff() {
-    if (diffChoice) diffChoice.querySelectorAll(".ccbtn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.mode === difficulty));
+    diffChoices.forEach((dc) => dc.querySelectorAll(".ccbtn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.mode === difficulty)));
     if (diffNote) diffNote.textContent = isEasy() ? "Practice mode — scores aren't saved" : "";
   }
-  if (diffChoice) diffChoice.querySelectorAll(".ccbtn").forEach((b) => {
+  diffChoices.forEach((dc) => dc.querySelectorAll(".ccbtn").forEach((b) => {
     b.addEventListener("click", () => {
       difficulty = b.dataset.mode; localStorage.setItem("etv_diff", difficulty); applyDiff();
     });
-  });
+  }));
   applyDiff();
 
   // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
@@ -588,8 +593,10 @@
 
   // ---- Black holes ----
   function spawnHole() {
-    // place away from the ship so it isn't an instant death
-    const mx = 80 * SC, my = 100 * SC;
+    // place away from the ship so it isn't an instant death. In easy mode keep
+    // voids well away from the edges so there's room to orbit all the way round.
+    const mx = isEasy() ? W * 0.24 : 80 * SC;
+    const my = isEasy() ? H * 0.24 : 100 * SC;
     let x, y, tries = 0;
     do {
       x = mx + Math.random() * (W - mx * 2);
@@ -680,12 +687,13 @@
     clearInput();
     document.getElementById("finalTime").textContent = elapsed.toFixed(1) + "s";
     if (isEasy()) {
-      // practice run: never touch best score or the leaderboard
+      // practice run: never touch best score or the leaderboard, and hide the board
       document.getElementById("bestLine").textContent = "Practice mode — not saved";
       saveRow.classList.add("hidden");
+      boardOverEl.style.display = "none";
       pendingTs = null;
-      renderBoards();
     } else {
+      boardOverEl.style.display = "";
       if (elapsed > best) { best = elapsed; localStorage.setItem("etv_best", String(best)); }
       document.getElementById("bestLine").textContent =
         (elapsed >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
