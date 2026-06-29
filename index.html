@@ -340,7 +340,7 @@
   const POWERUP_LINGER = 30;      // seconds a pickup lingers on the field (long, for testing)
   const POWERUP_FIRST = 5;        // first pickup appears this many seconds in (same in both modes)
   const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
-  const MAGNET_RADIUS = 115;      // px: within this range a pickup is pulled toward the ship
+  const MAGNET_RADIUS = 190;      // px: within this range a pickup is pulled toward the ship
   const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
   const POWERUPS = {
     timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷" },
@@ -789,12 +789,17 @@
   function spawnPowerup() {
     const type = POWERUP_KEYS[Math.floor(Math.random() * POWERUP_KEYS.length)];
     const m = Math.min(W, H) * 0.13;
-    powerups.push({
-      type,
-      x: m + Math.random() * (W - 2 * m),
-      y: m + Math.random() * (H - 2 * m),
-      t: POWERUP_LINGER,
-    });
+    const clear = 180 * SC;                   // prefer spots this far from any void
+    let bx = W / 2, by = H / 2, best = -1;
+    for (let tries = 0; tries < 24; tries++) {
+      const x = m + Math.random() * (W - 2 * m);
+      const y = m + Math.random() * (H - 2 * m);
+      let nd = Infinity;
+      for (const h of holes) nd = Math.min(nd, Math.hypot(x - h.x, y - h.y));
+      if (nd > best) { best = nd; bx = x; by = y; }
+      if (nd > clear) break;                  // far enough from voids — good enough
+    }
+    powerups.push({ type, x: bx, y: by, t: POWERUP_LINGER });
   }
 
   // ---- Update ----
@@ -818,7 +823,7 @@
     }
 
     // pickups: count down their linger; nearby ones are magnetised in and absorbed
-    const collectR = (18 + 12) * SC, magR = MAGNET_RADIUS * SC;
+    const collectR = (26 + 18) * SC, magR = MAGNET_RADIUS * SC;
     for (let i = powerups.length - 1; i >= 0; i--) {
       const pu = powerups[i];
       pu.t -= dt;
@@ -1160,7 +1165,7 @@
   function drawPowerups() {
     for (const pu of powerups) {
       const p = POWERUPS[pu.type];
-      let s = 17 * SC;
+      let s = 26 * SC;
       if (pu.t < 3) s *= 1 + 0.2 * Math.sin(performance.now() / 65);  // expiry wiggle
       ctx.save();
       ctx.translate(pu.x, pu.y);
