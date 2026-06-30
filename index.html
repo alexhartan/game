@@ -416,6 +416,7 @@
   let bullets = [];              // active Blaster shots
   let firing = false;            // fire button / Space held while Blaster is active
   let fireCd = 0;                // cooldown until the next shot is allowed (seconds)
+  let flash = 0;                 // full-screen flash intensity (wormhole jumps)
   function isActive(type) { return !!active && active.type === type; }
 
   const keys = { up: false, down: false, left: false, right: false };
@@ -731,13 +732,17 @@
     const isPortal = Math.random() < voidCount() / 10;
     holes.push(isPortal ? makePortal(x, y) : makeVoid(x, y));
   }
-  // entering a wormhole rebuilds the field (same void count ±5), momentum kept
+  // entering a wormhole rebuilds the field, momentum kept. The destination void
+  // count is an INDEPENDENT gamble — not anchored to where you came from — so a
+  // jump can be a huge relief (8 -> 3) or a huge mistake (3 -> 7).
   function teleportMap() {
-    let count = voidCount() + (Math.floor(Math.random() * 11) - 5);  // ±5
-    if (count < 1) count = 1;
+    const count = 2 + Math.floor(Math.random() * 8);   // 2..9, decoupled from current
     holes = [];
     for (let i = 0; i < count; i++) { const [x, y] = holePos(); const v = makeVoid(x, y); v.grow = 1; holes.push(v); }
-    burst(ship.x, ship.y, "#ffffff", 50); shake = 10 * SC;   // arrival flash
+    // dramatic jump: blinding flash, hard shake, twin shock rings
+    flash = 1; shake = 26 * SC;
+    burst(ship.x, ship.y, "#ffffff", 80);
+    burst(ship.x, ship.y, PORTAL_EDGE, 56);
   }
 
   // Ever-present gravity. Logarithmic falloff: weak but always felt far away,
@@ -788,6 +793,7 @@
     bullets = [];
     firing = false;
     fireCd = 0;
+    flash = 0;
     powerupClock = 0;
     nextPowerupAt = POWERUP_FIRST;
     updateSlot();
@@ -820,7 +826,7 @@
     document.getElementById("return").style.opacity = "0";
     clearInput();
     held = null; active = null; powerups = []; lives = 0; invuln = 0; flicker = 0;
-    bullets = []; firing = false; fireCd = 0; updateSlot(); updateLives();
+    bullets = []; firing = false; fireCd = 0; flash = 0; updateSlot(); updateLives();
     document.getElementById("finalTime").textContent = score.toFixed(1) + "s";
     if (isEasy()) {
       // practice run: never touch best score or the leaderboard, and hide the board
@@ -958,6 +964,7 @@
     }
     if (invuln > 0) invuln -= dt;
     if (flicker > 0) flicker -= dt;
+    if (flash > 0) flash -= dt * 2.2;   // ~0.45s fade after a wormhole jump
 
     // Blaster: hold-to-fire, rate-limited to one shot per FIRE_INTERVAL
     if (fireCd > 0) fireCd -= dt;
@@ -1505,6 +1512,18 @@
     if (running) { drawOrb(); drawShip(); drawOffscreenIndicator(); }
 
     ctx.restore();
+
+    // wormhole jump flash (screen-space, fades fast), centered on the ship
+    if (flash > 0) {
+      const f = Math.min(1, flash);
+      const cx = Math.max(0, Math.min(W, ship.x)), cy = Math.max(0, Math.min(H, ship.y));
+      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(W, H) * 0.6);
+      g.addColorStop(0, `rgba(255,255,255,${0.85 * f})`);
+      g.addColorStop(0.45, `rgba(196,150,255,${0.7 * f})`);
+      g.addColorStop(1, "rgba(120,60,200,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+
     drawStick();   // screen-space UI, drawn outside the shake transform
     if (running) drawActiveLabel();
   }
