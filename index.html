@@ -724,9 +724,9 @@
   // ---- Black holes & wormholes ----
   function voidCount() { return holes.reduce((a, h) => a + (h.portal ? 0 : 1), 0); }
   // a position clear of the ship (and, in easy, away from the edges), biased
-  // toward the center: averaging two randoms gives a triangular distribution
+  // toward the center: averaging three randoms gives a bell-ish distribution
   // that peaks in the middle, so voids cluster centrally but can still reach out.
-  function ctrand() { return (Math.random() + Math.random()) / 2; }
+  function ctrand() { return (Math.random() + Math.random() + Math.random()) / 3; }
   function holePos() {
     const mx = isEasy() ? W * 0.24 : 80 * SC;
     const my = isEasy() ? H * 0.24 : 100 * SC;
@@ -1054,7 +1054,7 @@
         }
         if (dist < magR) {
           const pull = 1 - dist / magR;                // 0 at the edge -> 1 near the ship
-          const speed = (45 + 340 * pull) * SC;         // half-strength magnet; accelerates as it closes in
+          const speed = (28 + 200 * pull) * SC;         // gentle magnet; accelerates as it closes in
           pu.x += (dx / dist) * speed * dt;
           pu.y += (dy / dist) * speed * dt;
           pu.mag = true;                               // flag for a stretched glow while pulled
