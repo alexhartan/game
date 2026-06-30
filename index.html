@@ -373,6 +373,9 @@
   const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
   const MAGNET_RADIUS = 190;      // px: within this range a pickup is pulled toward the ship
   const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
+  const FIRE_INTERVAL = 0.5;      // Blaster: minimum seconds between shots
+  const BULLET_SPEED = 720;       // px/s a fired bullet travels (scaled by SC)
+  const BULLET_LIFE = 1.6;        // seconds a bullet stays alive
   const POWERUPS = {
     timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷", desc: "Slows down time" },
     boost:    { name: "Boost",        color: "#ff8a3d", glyph: "»", desc: "2× engine power" },
@@ -384,6 +387,7 @@
     reverse:  { name: "Reverse Pull", color: "#eab308", glyph: "⇄", desc: "Voids push you away" },
     score2x:  { name: "2× Score",     color: "#ec4899", glyph: "2", desc: "Double score" },
     life:     { name: "Extra Life",   color: "#ff4d6d", glyph: "♥", desc: "+1 life (max 3)" },
+    gun:      { name: "Blaster",      color: "#a3e635", glyph: "◎", desc: "Shoot to destroy voids" },
   };
   const POWERUP_KEYS = Object.keys(POWERUPS);
   // Parked: still fully implemented, just not spawned right now.
@@ -408,6 +412,9 @@
   let lives = 0;                 // extra hearts (0..3); each absorbs one death
   let invuln = 0;                // brief invulnerability after spending a life (seconds)
   let flicker = 0;               // ship blink timer after taking (absorbed) damage
+  let bullets = [];              // active Blaster shots
+  let firing = false;            // fire button / Space held while Blaster is active
+  let fireCd = 0;                // cooldown until the next shot is allowed (seconds)
   function isActive(type) { return !!active && active.type === type; }
 
   const keys = { up: false, down: false, left: false, right: false };
@@ -427,16 +434,23 @@
     if (e.target && e.target.tagName === "INPUT") return;  // let the name field type
     const k = KEYMAP[e.code];
     if (k) { keys[k] = true; e.preventDefault(); return; }
-    if (e.code === "Space") { e.preventDefault(); if (running) activatePowerup(); else start(); return; }
+    if (e.code === "Space") {
+      e.preventDefault();
+      if (!running) { start(); return; }
+      if (isActive("gun")) { firing = true; return; }   // Blaster active: hold to fire
+      activatePowerup();
+      return;
+    }
     if (e.code === "Enter" && !running) { e.preventDefault(); start(); }
   });
   window.addEventListener("keyup", (e) => {
     if (e.target && e.target.tagName === "INPUT") return;
+    if (e.code === "Space") { firing = false; return; }
     const k = KEYMAP[e.code];
     if (k) { keys[k] = false; e.preventDefault(); }
   });
   // dropping the ship's keys if focus is lost avoids "stuck thrust"
-  window.addEventListener("blur", () => { keys.up = keys.down = keys.left = keys.right = false; });
+  window.addEventListener("blur", () => { keys.up = keys.down = keys.left = keys.right = false; firing = false; });
 
   // ---- On-screen arrow keys (touch devices) ----
   // A keycap D-pad that drives the same keys.* state as the keyboard. Each key
@@ -449,6 +463,7 @@
   function joyR() { return Math.max(48, Math.min(W, H) * 0.13); }
   function clearInput() {
     keys.up = keys.down = keys.left = keys.right = false;
+    firing = false;
     joy.active = false; joy.x = 0; joy.y = 0; joy.id = null;
     if (dpad) dpad.querySelectorAll(".key.pressed").forEach((k) => k.classList.remove("pressed"));
   }
@@ -769,6 +784,9 @@
     lives = 0;
     invuln = 0;
     flicker = 0;
+    bullets = [];
+    firing = false;
+    fireCd = 0;
     powerupClock = 0;
     nextPowerupAt = POWERUP_FIRST;
     updateSlot();
@@ -800,7 +818,8 @@
       cause === "escaped" ? "Lost to the Void" : "Consumed";
     document.getElementById("return").style.opacity = "0";
     clearInput();
-    held = null; active = null; powerups = []; lives = 0; invuln = 0; flicker = 0; updateSlot(); updateLives();
+    held = null; active = null; powerups = []; lives = 0; invuln = 0; flicker = 0;
+    bullets = []; firing = false; fireCd = 0; updateSlot(); updateLives();
     document.getElementById("finalTime").textContent = score.toFixed(1) + "s";
     if (isEasy()) {
       // practice run: never touch best score or the leaderboard, and hide the board
@@ -834,6 +853,17 @@
   // shield drawn as an actual shield, not a "+"
   const SHIELD_SVG = (c, sz = 40) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="${c}"><path d="M12 1.5 L3.8 4.4 V11 C3.8 16.6 7.6 20.7 12 22.4 C16.4 20.7 20.2 16.6 20.2 11 V4.4 Z"/></svg>`;
   function updateSlot() {
+    if (isActive("gun")) {                 // Blaster active: slot becomes a FIRE button
+      const c = POWERUPS.gun.color;
+      slotEl.classList.remove("hidden");
+      slotIcon.innerHTML = ""; slotIcon.textContent = POWERUPS.gun.glyph; slotIcon.style.color = c;
+      slotIcon.style.borderColor = c;
+      slotIcon.style.boxShadow = `0 0 20px ${c}88, inset 0 0 14px ${c}55`;
+      slotName.textContent = "Fire";
+      slotName.style.color = c;
+      slotHint.textContent = isTouch ? "HOLD TO FIRE" : "HOLD SPACE";
+      return;
+    }
     if (held) {
       const p = POWERUPS[held];
       slotEl.classList.remove("hidden");
@@ -880,9 +910,26 @@
     held = null;
     updateSlot();
   }
-  if (slotEl) slotEl.addEventListener("pointerdown", (e) => {
-    e.preventDefault(); e.stopPropagation(); activatePowerup();
-  });
+  function fireBullet() {
+    const a = ship.angle, nx = Math.cos(a), ny = Math.sin(a), muzzle = 14 * SC;
+    bullets.push({
+      x: ship.x + nx * muzzle, y: ship.y + ny * muzzle,
+      vx: ship.vx + nx * BULLET_SPEED * SC, vy: ship.vy + ny * BULLET_SPEED * SC,
+      life: BULLET_LIFE, age: 0,
+    });
+    burst(ship.x + nx * muzzle, ship.y + ny * muzzle, "#d9ff7a", 6);
+  }
+  if (slotEl) {
+    slotEl.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (isActive("gun")) { firing = true; try { slotEl.setPointerCapture(e.pointerId); } catch (_) {} }
+      else activatePowerup();
+    });
+    const stopFire = () => { firing = false; };
+    slotEl.addEventListener("pointerup", stopFire);
+    slotEl.addEventListener("pointercancel", stopFire);
+    slotEl.addEventListener("pointerleave", stopFire);
+  }
 
   function spawnPowerup() {
     const type = POWERUP_SPAWN_KEYS[Math.floor(Math.random() * POWERUP_SPAWN_KEYS.length)];
@@ -903,9 +950,32 @@
   // ---- Update ----
   function update(dt) {
     // active buff counts down in REAL time; Time Warp scales the *world* only
-    if (active) { active.t -= dt; if (active.t <= 0) active = null; }
+    if (active) {
+      const wasGun = active.type === "gun";
+      active.t -= dt;
+      if (active.t <= 0) { active = null; if (wasGun) { firing = false; updateSlot(); } }
+    }
     if (invuln > 0) invuln -= dt;
     if (flicker > 0) flicker -= dt;
+
+    // Blaster: hold-to-fire, rate-limited to one shot per FIRE_INTERVAL
+    if (fireCd > 0) fireCd -= dt;
+    if (isActive("gun") && firing && fireCd <= 0) { fireBullet(); fireCd = FIRE_INTERVAL; }
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      let hit = false;
+      for (let n = holes.length - 1; n >= 0; n--) {
+        const h = holes[n];
+        if (h.portal) continue;                       // shots pass through wormholes
+        if (Math.hypot(h.x - b.x, h.y - b.y) < h.core + 6 * SC) {
+          burst(h.x, h.y, "#a3e635", 38); shake = Math.max(shake, 10 * SC);
+          holes.splice(n, 1); hit = true; break;
+        }
+      }
+      if (hit || b.age > b.life ||
+          b.x < -40 || b.x > W + 40 || b.y < -40 || b.y > H + 40) bullets.splice(i, 1);
+    }
     const sdt = dt * (isActive("timewarp") ? TIMEWARP_FACTOR : 1);
 
     elapsed += dt;
@@ -1353,6 +1423,22 @@
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
   }
 
+  // glowing lime projectiles fired by the Blaster
+  function drawBullets() {
+    if (!bullets.length) return;
+    ctx.save();
+    for (const b of bullets) {
+      const r = 3.2 * SC;
+      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r * 3);
+      g.addColorStop(0, "#d9ff7a"); g.addColorStop(0.4, "#a3e635"); g.addColorStop(1, "rgba(163,230,53,0)");
+      ctx.globalAlpha = 0.9; ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(b.x, b.y, r * 3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1; ctx.fillStyle = "#eaffb0";
+      ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
   // colored orb around the ship while a buff is active, with a depletion arc
   function drawOrb() {
     if (!active) return;
@@ -1407,6 +1493,7 @@
     drawGrid();
     drawHoles();
     drawPowerups();
+    drawBullets();
     drawParticles();
     if (running) { drawOrb(); drawShip(); drawOffscreenIndicator(); }
 
