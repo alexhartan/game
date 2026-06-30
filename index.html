@@ -361,7 +361,7 @@
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 600;       // player thrust from WASD/arrows (px/s^2)
   const MAX_SPEED = 600;          // px/s velocity clamp — tames runaway slingshots
-  const GRAV_STRENGTH = 480;      // base pull of a void
+  const GRAV_STRENGTH = 400;      // base pull of a void (scaled per-void by its random size)
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
   const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
   // No medium drag: momentum is conserved. Only gravity and your thrust change
@@ -1000,23 +1000,27 @@
       h.phase += h.spin * sdt;
     }
 
-    // pickups: count down their linger; nearby ones are magnetised in and absorbed
+    // pickups: count down their linger; nearby ones are magnetised in and absorbed.
+    // While a powerup is already held, ignore field pickups entirely — no pull, no
+    // collect — so you never lose your stored one by drifting over another.
     const collectR = (17 + 14) * SC, magR = MAGNET_RADIUS * SC;
     for (let i = powerups.length - 1; i >= 0; i--) {
       const pu = powerups[i];
       pu.t -= dt;
-      const dx = ship.x - pu.x, dy = ship.y - pu.y, dist = Math.hypot(dx, dy) + 0.001;
-      if (dist < collectR) {
-        if (pu.type === "life") { lives = Math.min(3, lives + 1); updateLives(); }
-        else { held = pu.type; updateSlot(); }
-        powerups.splice(i, 1); continue;
-      }
-      if (dist < magR) {
-        const pull = 1 - dist / magR;                 // 0 at the edge -> 1 near the ship
-        const speed = (90 + 680 * pull) * SC;          // accelerates as it closes in
-        pu.x += (dx / dist) * speed * dt;
-        pu.y += (dy / dist) * speed * dt;
-        pu.mag = true;                                 // flag for a stretched glow while pulled
+      if (!held) {
+        const dx = ship.x - pu.x, dy = ship.y - pu.y, dist = Math.hypot(dx, dy) + 0.001;
+        if (dist < collectR) {
+          if (pu.type === "life") { lives = Math.min(3, lives + 1); updateLives(); }
+          else { held = pu.type; updateSlot(); }
+          powerups.splice(i, 1); continue;
+        }
+        if (dist < magR) {
+          const pull = 1 - dist / magR;                // 0 at the edge -> 1 near the ship
+          const speed = (45 + 340 * pull) * SC;         // half-strength magnet; accelerates as it closes in
+          pu.x += (dx / dist) * speed * dt;
+          pu.y += (dy / dist) * speed * dt;
+          pu.mag = true;                               // flag for a stretched glow while pulled
+        } else pu.mag = false;
       } else pu.mag = false;
       if (pu.t <= 0) powerups.splice(i, 1);
     }
