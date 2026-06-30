@@ -175,6 +175,7 @@
 
   /* segmented toggles (difficulty + control mode) */
   .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
+  .puchoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
   #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
   body.touch #ctrlChoice { display: inline-flex; }
   .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
@@ -277,6 +278,11 @@
     <button class="ccbtn" data-mode="easy">Easy</button>
   </div>
   <div id="diffNote"></div>
+  <div class="puchoice">
+    <span class="cclabel">Powerups</span>
+    <button class="ccbtn" data-pu="on">On</button>
+    <button class="ccbtn" data-pu="off">Off</button>
+  </div>
   <div id="ctrlChoice">
     <span class="cclabel">Controls</span>
     <button class="ccbtn" data-mode="keys">Arrow Keys</button>
@@ -315,6 +321,11 @@
     <span class="cclabel">Mode</span>
     <button class="ccbtn" data-mode="normal">Normal</button>
     <button class="ccbtn" data-mode="easy">Easy</button>
+  </div>
+  <div class="puchoice">
+    <span class="cclabel">Powerups</span>
+    <button class="ccbtn" data-pu="on">On</button>
+    <button class="ccbtn" data-pu="off">Off</button>
   </div>
   <button class="btn" id="retryBtn">Try Again</button>
 </div>
@@ -391,8 +402,9 @@
     gun:      { name: "Blaster",      color: "#a3e635", glyph: "◎", desc: "Shoot to destroy voids" },
   };
   const POWERUP_KEYS = Object.keys(POWERUPS);
-  // Parked: still fully implemented, just not spawned right now.
-  const PARKED = ["reverse", "berserk"];
+  // Parked: still fully implemented, just not spawned right now. "timeout" paused
+  // the off-screen return timer, which no longer exists now that walls bounce.
+  const PARKED = ["reverse", "berserk", "timeout"];
   const POWERUP_SPAWN_KEYS = POWERUP_KEYS.filter((k) => !PARKED.includes(k));
   const PORTAL_EDGE = "#b478ff";  // purple edge for white wormholes
 
@@ -511,6 +523,24 @@
     });
   }));
   applyDiff();
+
+  // ---- Powerups toggle: on/off. Independent of difficulty; same leaderboard
+  // either way (high scores are shared with and without powerups). ----
+  let powerupsEnabled = (localStorage.getItem("etv_pu") || "on") === "on";
+  const puChoices = document.querySelectorAll(".puchoice");
+  function applyPU() {
+    puChoices.forEach((pc) => pc.querySelectorAll(".ccbtn").forEach((b) =>
+      b.classList.toggle("active", b.dataset.pu === (powerupsEnabled ? "on" : "off"))));
+    document.querySelectorAll(".legendwrap").forEach((el) =>
+      el.style.display = powerupsEnabled ? "" : "none");
+  }
+  puChoices.forEach((pc) => pc.querySelectorAll(".ccbtn").forEach((b) => {
+    b.addEventListener("click", () => {
+      powerupsEnabled = b.dataset.pu === "on";
+      localStorage.setItem("etv_pu", powerupsEnabled ? "on" : "off"); applyPU();
+    });
+  }));
+  applyPU();
 
   // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
   let controlMode = localStorage.getItem("etv_ctrl") || "keys";
@@ -728,8 +758,10 @@
   }
   function spawnHole() {
     const [x, y] = holePos();
-    // the next void may instead be a wormhole; odds rise with the void count
-    const isPortal = Math.random() < voidCount() / 10;
+    // the next void may instead be a wormhole; odds rise with the void count.
+    // Wormholes are part of the powerup feature set, so they're off in the
+    // no-powerups mode (which is then a pure ship-vs-voids survival run).
+    const isPortal = powerupsEnabled && Math.random() < voidCount() / 10;
     holes.push(isPortal ? makePortal(x, y) : makeVoid(x, y));
   }
   // entering a wormhole rebuilds the field, momentum kept. The destination void
@@ -992,8 +1024,10 @@
     // void spawns + powerup pickups (both ride scaled time, so Time Warp slows them)
     spawnTimer += sdt;
     if (spawnTimer >= spawnInterval()) { spawnTimer -= spawnInterval(); spawnHole(); }
-    powerupClock += sdt;
-    if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY; }
+    if (powerupsEnabled) {
+      powerupClock += sdt;
+      if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY; }
+    }
 
     for (const h of holes) {
       h.grow = Math.min(1, h.grow + sdt * 1.2); // ease in pull when born
@@ -1063,22 +1097,17 @@
     // when coasting, point the nose along travel so the drift reads clearly
     if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6 * SC) ship.angle = Math.atan2(ship.vy, ship.vx);
 
-    // off-screen re-entry timer: Time-Out pauses it (starts fresh after), Shield ignores it
-    const offscreen = ship.x < 0 || ship.x > W || ship.y < 0 || ship.y > H;
-    if (offscreen) {
-      if (isActive("timeout")) { offT = 0; }
-      else {
-        offT += sdt;
-        if (offT >= returnLimit() && !isActive("shield") && invuln <= 0) {
-          if (lives > 0) {   // spend a life: keep momentum, reset the timer, blink
-            lives--; updateLives(); invuln = 1.4; flicker = 1.4; offT = 0;
-            burst(ship.x, ship.y, "#ff4d6d", 36);
-          } else { gameOver("escaped"); return; }
-        }
-      }
-    } else {
-      offT = 0;
-    }
+    // bounce off the walls instead of drifting off-screen. We only reflect when
+    // the ship is actually moving INTO a wall, so it doesn't jitter when held
+    // against one. A little energy is lost each bounce (restitution < 1).
+    const wm = 10 * SC, REST = 0.86;
+    let bv = 0;
+    if (ship.x < wm)          { ship.x = wm;     if (ship.vx < 0) { bv = Math.max(bv, -ship.vx); ship.vx = -ship.vx * REST; } }
+    else if (ship.x > W - wm) { ship.x = W - wm; if (ship.vx > 0) { bv = Math.max(bv,  ship.vx); ship.vx = -ship.vx * REST; } }
+    if (ship.y < wm)          { ship.y = wm;     if (ship.vy < 0) { bv = Math.max(bv, -ship.vy); ship.vy = -ship.vy * REST; } }
+    else if (ship.y > H - wm) { ship.y = H - wm; if (ship.vy > 0) { bv = Math.max(bv,  ship.vy); ship.vy = -ship.vy * REST; } }
+    if (bv > 140 * SC) { shake = Math.max(shake, Math.min(12, bv / 80) * SC); burst(ship.x, ship.y, "#8ab0ff", 6); }
+    offT = 0;   // off-screen death retired now that walls contain the ship
 
     // hole proximity: wormholes teleport you; voids kill (unless Shield / invuln /
     // a spare life), and Berserker destroys them
