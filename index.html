@@ -344,6 +344,7 @@
   // sqrt(area) (geometric mean of W,H) so portrait and landscape are symmetric.
   let W = 0, H = 0, DPR = 1, SC = 1;
   const REF = Math.sqrt(1100 * 720);
+  const WORLD_SCALE = 0.7;   // shrink every world quantity by 30% for a slower, smaller-feeling game
   function resize() {
     const oldW = W, oldH = H, oldSC = SC;
     // cap pixel ratio: fill cost scales with DPR^2, and the glows are fill-heavy
@@ -355,7 +356,7 @@
     canvas.style.width = W + "px";
     canvas.style.height = H + "px";
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    SC = Math.sqrt(W * H) / REF;
+    SC = Math.sqrt(W * H) / REF * WORLD_SCALE;
     // on a live resize/rotation, rescale the running state so play stays fair
     if (oldW && oldH) {
       const rx = W / oldW, ry = H / oldH, rs = SC / oldSC;
@@ -722,14 +723,17 @@
 
   // ---- Black holes & wormholes ----
   function voidCount() { return holes.reduce((a, h) => a + (h.portal ? 0 : 1), 0); }
-  // a position clear of the ship (and, in easy, away from the edges)
+  // a position clear of the ship (and, in easy, away from the edges), biased
+  // toward the center: averaging two randoms gives a triangular distribution
+  // that peaks in the middle, so voids cluster centrally but can still reach out.
+  function ctrand() { return (Math.random() + Math.random()) / 2; }
   function holePos() {
     const mx = isEasy() ? W * 0.24 : 80 * SC;
     const my = isEasy() ? H * 0.24 : 100 * SC;
     let x, y, tries = 0;
     do {
-      x = mx + Math.random() * (W - mx * 2);
-      y = my + Math.random() * (H - my * 2);
+      x = mx + ctrand() * (W - mx * 2);
+      y = my + ctrand() * (H - my * 2);
       tries++;
     } while (Math.hypot(x - ship.x, y - ship.y) < 300 * SC && tries < 30);
     return [x, y];
