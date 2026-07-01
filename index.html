@@ -3,1602 +3,932 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-<title>Escape the Void</title>
+<title>Hardwood Auction — PvP NBA Draft</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #05060c; }
-  body {
+  :root {
+    --bg: #0a0d16;
+    --panel: #121728;
+    --panel-2: #1a2138;
+    --line: rgba(120,140,220,0.18);
+    --ink: #eef2ff;
+    --muted: #9aa6d6;
+    --dim: #6a76a8;
+    --p1: #ff7a3c;   /* orange */
+    --p2: #3ca6ff;   /* blue */
+    --gold: #ffd15c;
+    --good: #47e6a0;
+    --bad: #ff5c7a;
+  }
+  html, body {
+    width: 100%; min-height: 100%;
+    background:
+      radial-gradient(1200px 700px at 50% -10%, rgba(60,90,200,0.18), transparent 60%),
+      radial-gradient(900px 600px at 90% 110%, rgba(255,122,60,0.10), transparent 60%),
+      var(--bg);
+    color: var(--ink);
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
-  #game { display: block; position: fixed; inset: 0; touch-action: none; }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+  .wrap { width: 100%; max-width: 960px; padding: 18px 16px 60px; }
 
-  .overlay {
-    position: fixed; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    text-align: center;
-    color: #e8ecff;
-    z-index: 10;
-    padding: 24px; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    background: radial-gradient(ellipse at center, rgba(10,12,28,0.55) 0%, rgba(5,6,12,0.88) 70%);
-    cursor: default;
-    user-select: none;
-    transition: opacity 0.35s ease;
-  }
-  .overlay.hidden { opacity: 0; pointer-events: none; }
+  /* ---------- Screens ---------- */
+  .screen { display: none; animation: fade .35s ease; }
+  .screen.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px);} to {opacity:1; transform:none;} }
 
-  .title {
-    font-size: clamp(34px, 8vw, 76px);
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    background: linear-gradient(180deg, #fff 0%, #8aa0ff 100%);
-    -webkit-background-clip: text; background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-shadow: 0 0 40px rgba(120,140,255,0.35);
+  /* ---------- Header / title ---------- */
+  .brand { text-align: center; margin: 10px 0 6px; }
+  .brand h1 {
+    font-size: clamp(30px, 7vw, 60px); font-weight: 900; letter-spacing: 0.04em; line-height: 1;
+    background: linear-gradient(180deg,#fff, #9db4ff);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
   }
-  .subtitle { margin-top: 14px; font-size: clamp(14px, 2.4vw, 18px); color: #9aa6d6; max-width: 540px; line-height: 1.6; }
-  .hint { margin-top: 8px; font-size: 13px; color: #6a76a8; }
+  .brand .sub { color: var(--muted); margin-top: 10px; font-size: clamp(13px,2.4vw,16px); }
+  .court { color: var(--gold); font-weight: 700; letter-spacing:.14em; font-size: 12px; text-transform: uppercase; }
+
+  /* ---------- Cards / panels ---------- */
+  .card {
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line); border-radius: 18px;
+    padding: 20px; margin-top: 16px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+  }
+  .rules { color: var(--muted); font-size: 14px; line-height: 1.7; }
+  .rules b { color: var(--ink); }
+  .rules ul { margin: 8px 0 0 18px; }
+  .rules li { margin: 4px 0; }
+
+  .names { display:flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
+  .name-field { flex: 1 1 200px; }
+  .name-field label { display:block; font-size:12px; text-transform:uppercase; letter-spacing:.1em; color: var(--dim); margin-bottom:6px; }
+  .name-field.p1 label { color: var(--p1); }
+  .name-field.p2 label { color: var(--p2); }
+  input[type=text] {
+    width:100%; padding: 12px 14px; font-size: 16px; color: var(--ink);
+    background: #0c1120; border: 1px solid var(--line); border-radius: 12px; outline: none;
+  }
+  input.p1:focus { border-color: var(--p1); }
+  input.p2:focus { border-color: var(--p2); }
 
   .btn {
-    margin-top: 34px;
-    padding: 14px 38px;
-    font-size: 17px; font-weight: 600; letter-spacing: 0.04em;
-    color: #fff; cursor: pointer;
-    background: linear-gradient(180deg, #4a5cff, #2a37c8);
-    border: 1px solid rgba(150,170,255,0.5);
-    border-radius: 999px;
-    box-shadow: 0 8px 30px rgba(60,80,255,0.4), inset 0 1px 0 rgba(255,255,255,0.3);
-    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    padding: 15px 34px; font-size: 17px; font-weight: 800; letter-spacing:.03em;
+    color:#fff; cursor:pointer; border: none; border-radius: 999px;
+    background: linear-gradient(180deg,#5568ff,#2a37c8);
+    box-shadow: 0 10px 30px rgba(60,80,255,0.35);
+    transition: transform .08s ease, filter .15s ease, opacity .15s;
+    user-select:none;
   }
-  .btn:hover { transform: translateY(-2px); box-shadow: 0 12px 38px rgba(60,80,255,0.55), inset 0 1px 0 rgba(255,255,255,0.3); }
-  .btn:active { transform: translateY(0); }
+  .btn:hover { filter: brightness(1.08); }
+  .btn:active { transform: translateY(2px) scale(.99); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.4); }
+  .btn.big { padding: 18px 48px; font-size: 20px; }
+  .btn.stop { background: linear-gradient(180deg,#ff5c7a,#c81f45); box-shadow: 0 10px 30px rgba(255,60,90,.35); }
+  .btn.ghost { background: #0c1120; border:1px solid var(--line); box-shadow:none; }
+  .center { text-align:center; }
 
-  .stat-big { margin-top: 28px; font-size: clamp(40px, 9vw, 64px); font-weight: 800; color: #fff; }
-  .stat-label { font-size: 13px; letter-spacing: 0.25em; text-transform: uppercase; color: #7a86b8; margin-top: 4px; }
-  .best { margin-top: 18px; font-size: 15px; color: #9aa6d6; }
+  /* ---------- Progress / status bar ---------- */
+  .topbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top: 4px; flex-wrap:wrap; }
+  .round-pill {
+    font-size: 12px; letter-spacing:.12em; text-transform:uppercase; color: var(--dim);
+    background:#0c1120; border:1px solid var(--line); padding:8px 14px; border-radius:999px; font-weight:700;
+  }
+  .scoreboard { display:flex; gap:10px; }
+  .team-chip {
+    display:flex; align-items:center; gap:8px; padding:8px 14px; border-radius: 999px;
+    background:#0c1120; border:1px solid var(--line); font-weight:800; font-size: 14px;
+  }
+  .team-chip .dot { width:10px; height:10px; border-radius:50%; }
+  .team-chip.p1 .dot { background: var(--p1);} .team-chip.p2 .dot { background: var(--p2);}
+  .team-chip .coins { color: var(--gold); }
+  .team-chip.p1.turn { border-color: var(--p1); box-shadow: 0 0 22px rgba(255,122,60,.4);}
+  .team-chip.p2.turn { border-color: var(--p2); box-shadow: 0 0 22px rgba(60,166,255,.4);}
 
-  #hud {
-    position: fixed; top: 18px; left: 0; right: 0;
-    display: flex; justify-content: center; gap: 46px;
-    z-index: 5; pointer-events: none;
-    color: #cdd5ff; user-select: none;
-    text-shadow: 0 0 12px rgba(0,0,0,0.8);
+  /* ---------- Reel / slot machine ---------- */
+  .pos-banner { text-align:center; margin-top: 18px; }
+  .pos-banner .lbl { font-size:12px; letter-spacing:.2em; text-transform:uppercase; color: var(--dim);}
+  .pos-banner .pos {
+    display:inline-block; margin-top:6px; font-size: clamp(20px,5vw,30px); font-weight:900; letter-spacing:.04em;
+    padding: 4px 18px; border-radius: 12px;
+    background: linear-gradient(180deg, rgba(255,209,92,.16), rgba(255,209,92,.04));
+    border:1px solid rgba(255,209,92,.35); color: var(--gold);
   }
-  #hud .item { text-align: center; }
-  #hud .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  #hud .l { font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: #7a86b8; margin-top: 2px; }
-  #hud.hidden { opacity: 0; }
+  .reel-frame {
+    position: relative; margin: 18px auto 0; height: 128px; max-width: 640px;
+    border-radius: 16px; overflow: hidden;
+    background: #070a14; border:1px solid var(--line);
+    box-shadow: inset 0 0 60px rgba(0,0,0,.7);
+  }
+  .reel-frame::before, .reel-frame::after {
+    content:""; position:absolute; left:0; right:0; height: 42px; z-index:3; pointer-events:none;
+  }
+  .reel-frame::before { top:0; background: linear-gradient(180deg,#070a14, transparent);}
+  .reel-frame::after { bottom:0; background: linear-gradient(0deg,#070a14, transparent);}
+  .reel-line {
+    position:absolute; left:0; right:0; top:50%; height:44px; transform: translateY(-50%);
+    border-top:1px solid rgba(255,209,92,.35); border-bottom:1px solid rgba(255,209,92,.35);
+    z-index:2; pointer-events:none;
+  }
+  .reel-track { position:absolute; left:0; right:0; top:0; will-change: transform; }
+  .reel-item {
+    height: 44px; display:flex; align-items:center; justify-content:center; gap:10px;
+    font-size: clamp(16px,4vw,22px); font-weight: 800; color:#c7d0f5; white-space:nowrap;
+  }
+  .reel-item .era { font-size:13px; color: var(--dim); font-weight:600; }
 
-  #warn {
-    position: fixed; bottom: 40px; left: 0; right: 0; text-align: center;
-    z-index: 5; pointer-events: none;
-    color: #ff6b8a; font-weight: 700; font-size: 20px; letter-spacing: 0.1em;
-    text-transform: uppercase; opacity: 0; transition: opacity 0.2s;
-    text-shadow: 0 0 20px rgba(255,60,90,0.6);
+  /* ---------- Player reveal card ---------- */
+  .reveal { max-width: 520px; margin: 16px auto 0; text-align:center; }
+  .player-card {
+    position: relative; border-radius: 20px; padding: 22px 20px 20px;
+    background:
+      radial-gradient(400px 200px at 50% 0%, rgba(255,209,92,.14), transparent 70%),
+      linear-gradient(180deg,#151b30,#0e1226);
+    border:1px solid rgba(255,209,92,.30);
+    box-shadow: 0 24px 60px rgba(0,0,0,.45);
+    animation: pop .4s cubic-bezier(.2,1.3,.4,1);
   }
+  @keyframes pop { from { transform: scale(.85); opacity:0;} to {transform:none; opacity:1;} }
+  .player-card .pos-tag {
+    position:absolute; top:14px; left:14px; font-size:13px; font-weight:900; letter-spacing:.08em;
+    color: var(--gold); background: rgba(255,209,92,.12); border:1px solid rgba(255,209,92,.4);
+    padding:4px 12px; border-radius:999px;
+  }
+  .player-card .rating {
+    position:absolute; top:14px; right:14px; font-size:13px; font-weight:900;
+    color: var(--good); background: rgba(71,230,160,.1); border:1px solid rgba(71,230,160,.35);
+    padding:4px 12px; border-radius:999px;
+  }
+  .player-card .pname { font-size: clamp(24px,6vw,38px); font-weight:900; margin-top: 22px; line-height:1.05;}
+  .player-card .meta { color: var(--muted); margin-top:8px; font-size: 15px; }
+  .player-card .star { color: var(--gold); font-size: 13px; margin-top:10px; letter-spacing:.04em;}
 
-  #return {
-    position: fixed; inset: 0; z-index: 6; pointer-events: none;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    opacity: 0; transition: opacity 0.15s;
-    color: #ff5a7a; text-shadow: 0 0 36px rgba(255,40,80,0.75);
-  }
-  #return .rlabel {
-    font-size: 16px; letter-spacing: 0.32em; text-transform: uppercase;
-    color: #ff8aa0; margin-bottom: 6px;
-  }
-  #return .rnum {
-    font-size: clamp(96px, 22vw, 230px); font-weight: 800; line-height: 1;
-    font-variant-numeric: tabular-nums;
-    animation: rpulse 1s ease-in-out infinite;
-  }
-  @keyframes rpulse {
-    0%, 100% { transform: scale(1); opacity: 0.92; }
-    50% { transform: scale(1.13); opacity: 1; }
-  }
+  /* ---------- Auction ---------- */
+  .auction { max-width: 640px; margin: 16px auto 0; }
+  .bid-display { text-align:center; margin-bottom: 10px; }
+  .bid-display .amt { font-size: clamp(40px,11vw,64px); font-weight:900; color: var(--gold); line-height:1; }
+  .bid-display .amt small { font-size:.4em; color: var(--muted); font-weight:700; }
+  .bid-display .leader { margin-top:6px; font-size:15px; font-weight:800; min-height: 20px; }
+  .bid-display .leader.p1 { color: var(--p1);} .bid-display .leader.p2 { color: var(--p2);}
 
-  /* On-screen arrow keys (touch only) — keycaps, pinned right to leave room
-     for the powerup slot in the bottom-left corner */
-  #dpad {
-    position: fixed; right: 16px; bottom: 22px;
-    width: 50vw; max-width: 350px; min-width: 210px;
-    z-index: 8; display: none; touch-action: none;
-    user-select: none; -webkit-user-select: none;
-  }
-  body.touch #dpad { display: block; }
-  #dpad .row { display: flex; justify-content: center; gap: 4%; }
-  #dpad .row + .row { margin-top: 4%; }
-  #dpad .key {
-    width: 28%; aspect-ratio: 1 / 1;
-    display: flex; align-items: center; justify-content: center;
-    font-size: clamp(20px, 7.5vw, 42px); line-height: 1; color: #d3dbff;
-    border-radius: 16%;
-    background: linear-gradient(180deg, #313a6b 0%, #1c2249 72%, #161b3a 100%);
-    border: 1px solid rgba(150,170,255,0.30);
-    box-shadow: 0 5px 0 #0c1030, 0 7px 14px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.20);
-    -webkit-tap-highlight-color: transparent;
-  }
-  #dpad .key.pressed {
-    transform: translateY(4px); color: #fff;
-    background: linear-gradient(180deg, #4a5cff 0%, #34409d 80%);
-    box-shadow: 0 1px 0 #0c1030, 0 2px 6px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18);
-  }
-  /* lift the danger banner above the keys on touch screens */
-  body.touch #warn { bottom: 200px; }
-  /* in joystick mode the D-pad is hidden (the whole screen becomes the stick) */
-  body.touch.ctrl-stick #dpad { display: none; }
+  .timer-wrap { height: 10px; background:#0c1120; border-radius:999px; overflow:hidden; margin: 10px auto 4px; max-width:520px; border:1px solid var(--line);}
+  .timer-bar { height:100%; width:100%; border-radius:999px; background: linear-gradient(90deg,var(--good), var(--gold)); transition: width .1s linear; }
+  .timer-bar.warn { background: linear-gradient(90deg,var(--gold), var(--bad)); }
+  .phase-note { text-align:center; color: var(--muted); font-size: 13px; min-height: 18px; margin-top: 4px; }
 
-  /* Powerup slot (bottom-left). Tap on touch / SPACE on desktop to activate. */
-  #slot {
-    position: fixed; left: 18px; bottom: 22px; z-index: 9;
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent;
-    cursor: pointer;
+  .bidders { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .bidder {
+    border-radius: 16px; padding: 16px 14px; text-align:center;
+    background:#0c1120; border:2px solid var(--line);
   }
-  #slot.hidden { display: none; }
-  #slotIcon {
-    width: 64px; height: 64px; border-radius: 16px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 34px; font-weight: 800; line-height: 1;
-    background: rgba(8,10,20,0.82); border: 2px solid #fff;
-    animation: slotpulse 1.1s ease-in-out infinite;
+  .bidder.p1 { border-color: rgba(255,122,60,.5);} .bidder.p2 { border-color: rgba(60,166,255,.5);}
+  .bidder.lead.p1 { box-shadow: 0 0 26px rgba(255,122,60,.5); border-color: var(--p1);}
+  .bidder.lead.p2 { box-shadow: 0 0 26px rgba(60,166,255,.5); border-color: var(--p2);}
+  .bidder .who { font-weight:900; font-size:15px; }
+  .bidder.p1 .who { color: var(--p1);} .bidder.p2 .who { color: var(--p2);}
+  .bidder .bal { font-size:12px; color: var(--muted); margin-top:2px; }
+  .bidder .bal b { color: var(--gold); }
+  .bid-btns { display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap; }
+  .bid-btn {
+    flex:1 1 auto; min-width: 58px; padding: 14px 6px; font-size: 17px; font-weight:900; cursor:pointer;
+    border:none; border-radius: 12px; color:#fff; user-select:none;
+    transition: transform .06s ease, filter .15s;
   }
-  #slotName { font-size: 13px; font-weight: 800; letter-spacing: 0.02em; color: #fff; }
-  #slotHint {
-    font-size: 10px; letter-spacing: 0.18em; color: #8a93bd; font-weight: 700;
-  }
-  @keyframes slotpulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  .bidder.p1 .bid-btn { background: linear-gradient(180deg,#ff8a4d,#d8531f);}
+  .bidder.p2 .bid-btn { background: linear-gradient(180deg,#4db1ff,#1f6fd8);}
+  .bid-btn:active { transform: translateY(2px); }
+  .bid-btn:disabled { opacity:.35; cursor:not-allowed; filter:grayscale(.5);}
+  .bid-btn.pass { background:#1a2138 !important; border:1px solid var(--line); font-size:14px; }
+  .status-line { margin-top:8px; font-size:12px; min-height: 16px; font-weight:700; color: var(--muted); }
+  .status-line.locked { color: var(--dim);} .status-line.filled { color: var(--bad);} .status-line.passed { color: var(--dim);}
 
-  /* Extra-life hearts, top-left corner */
-  #lives {
-    position: fixed; top: 16px; left: 16px; z-index: 9; pointer-events: none;
-    font-size: 26px; letter-spacing: 5px; color: #ff4d6d;
-    text-shadow: 0 0 10px rgba(255,70,100,0.6);
+  /* ---------- Rosters ---------- */
+  .rosters { display:grid; grid-template-columns: 1fr 1fr; gap:14px; margin-top: 18px; }
+  .roster { background:#0c1120; border:1px solid var(--line); border-radius:16px; padding:14px; }
+  .roster h3 { font-size:15px; font-weight:900; margin-bottom:10px; display:flex; align-items:center; gap:8px; justify-content:space-between; flex-wrap:wrap;}
+  .roster.p1 h3 .nm { color: var(--p1);} .roster.p2 h3 .nm { color: var(--p2);}
+  .roster h3 .tot { color: var(--gold); font-size: 13px; }
+  .slot {
+    display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:10px;
+    background:#0a0e1c; border:1px solid transparent; margin-bottom:7px; font-size:14px;
   }
-  #lives.hidden { display: none; }
+  .slot .pp { font-size:11px; font-weight:900; color: var(--gold); width:26px; }
+  .slot .nn { font-weight:700; flex:1; }
+  .slot .rr { color: var(--good); font-weight:800; font-size:13px; }
+  .slot .cost { color: var(--muted); font-size:12px; width:34px; text-align:right; }
+  .slot.empty .nn { color: var(--dim); font-weight:500; font-style: italic; }
+  .slot.hot { border-color: var(--gold); animation: hot .8s ease; }
+  @keyframes hot { from { background: rgba(255,209,92,.25);} to {background:#0a0e1c;} }
 
-  /* Powerup legend on the start screen */
-  .legendwrap { margin-top: 26px; width: min(620px, 94vw); }
-  .legendtitle { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 12px; }
-  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
-  @media (max-width: 520px) { .legend { grid-template-columns: 1fr; } }
-  .legrow { display: flex; align-items: center; gap: 11px; text-align: left; }
-  .legicon {
-    width: 32px; height: 32px; flex: 0 0 32px; border-radius: 9px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 19px; font-weight: 800; line-height: 1;
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
-  }
-  .legname { font-size: 13px; font-weight: 700; color: #e8ecff; line-height: 1.2; }
-  .legdesc { font-size: 11px; color: #8a93bd; line-height: 1.2; }
+  /* ---------- Results ---------- */
+  .result-head { text-align:center; margin: 8px 0 4px; }
+  .winner-name { font-size: clamp(28px,7vw,52px); font-weight:900; margin-top:6px; }
+  .winner-name.p1 { color: var(--p1);} .winner-name.p2 { color: var(--p2);}
+  .winner-name.tie { color: var(--gold);}
+  .result-sub { color: var(--muted); margin-top:6px; }
 
-  /* segmented toggles (difficulty + control mode) */
-  .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
-  .puchoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
-  #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
-  body.touch #ctrlChoice { display: inline-flex; }
-  .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
-  .ccbtn {
-    padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
-    color: #aab4e6; background: rgba(30,36,72,0.7);
-    border: 1px solid rgba(150,170,255,0.28); border-radius: 999px;
-    -webkit-tap-highlight-color: transparent;
-  }
-  .ccbtn.active {
-    color: #fff; background: linear-gradient(180deg, #4a5cff, #2a37c8);
-    border-color: rgba(150,170,255,0.5); box-shadow: 0 4px 14px rgba(60,80,255,0.35);
-  }
-  .diffchoice .ccbtn.active[data-mode="easy"] {
-    background: linear-gradient(180deg, #2fbf71, #1d8a4f); border-color: rgba(120,255,180,0.5);
-    box-shadow: 0 4px 14px rgba(40,200,120,0.35);
-  }
-  #diffNote { margin-top: 10px; font-size: 12px; color: #6ad29a; min-height: 14px; }
-
-  /* Leaderboard + name save */
-  #saveRow { margin-top: 22px; display: flex; gap: 10px; justify-content: center; align-items: center; flex-wrap: wrap; }
-  #saveRow.hidden { display: none; }
-  #nameInput {
-    padding: 11px 15px; font-size: 16px; border-radius: 10px;
-    border: 1px solid rgba(150,170,255,0.4); background: rgba(20,24,48,0.85);
-    color: #fff; width: min(220px, 56vw); outline: none;
-    user-select: text; -webkit-user-select: text;
-  }
-  #nameInput:focus { border-color: #6f8bff; box-shadow: 0 0 0 3px rgba(80,100,255,0.25); }
-  #nameInput::placeholder { color: #6a76a8; }
-  #saveBtn {
-    padding: 11px 22px; font-size: 15px; font-weight: 600; letter-spacing: 0.03em;
-    color: #fff; cursor: pointer; border-radius: 10px;
-    background: linear-gradient(180deg, #4a5cff, #2a37c8);
-    border: 1px solid rgba(150,170,255,0.5);
-    box-shadow: 0 6px 20px rgba(60,80,255,0.35);
-  }
-  #saveBtn:hover { filter: brightness(1.08); }
-
-  .board { margin-top: 22px; width: min(560px, 94vw); }
-  .board h3 { font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase; color: #7a86b8; margin-bottom: 10px; }
-  .board .cols { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
-  .board .col { flex: 1 1 0; min-width: 0; }
-  .board .col h4 { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #6a76a8; margin-bottom: 6px; text-align: center; }
-  .board ol { list-style: none; padding: 0; margin: 0; }
-  .board li { display: flex; align-items: center; gap: 10px; padding: 6px 11px; border-radius: 8px; font-size: 14px; color: #cdd5ff; }
-  .board li:nth-child(odd) { background: rgba(120,140,255,0.05); }
-  .board li.me { background: rgba(90,110,255,0.28); color: #fff; box-shadow: inset 0 0 0 1px rgba(150,170,255,0.55); }
-  .board li .rank { width: 16px; text-align: right; color: #7a86b8; font-variant-numeric: tabular-nums; font-size: 12px; }
-  .board li .nm { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .board li .tm { font-variant-numeric: tabular-nums; font-weight: 700; color: #aeb9ff; }
-  .board .empty { text-align: center; color: #6a76a8; font-size: 12px; padding: 8px 4px; }
-  @media (max-width: 440px) {
-    .board .cols { gap: 8px; }
-    .board li { gap: 6px; padding: 5px 7px; font-size: 12px; }
-    .board li .tm { font-size: 12px; }
-  }
+  .foot { text-align:center; color: var(--dim); font-size:12px; margin-top: 26px; }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
+<div class="wrap">
 
-<div id="hud" class="hidden">
-  <div class="item"><div class="v" id="hudTime">0.0</div><div class="l">Score</div></div>
-  <div class="item"><div class="v" id="hudHoles">0</div><div class="l">Voids</div></div>
-</div>
-
-<div id="warn">⚠ Event Horizon ⚠</div>
-
-<div id="return">
-  <div class="rlabel">Re-enter in</div>
-  <div class="rnum" id="returnNum">5</div>
-</div>
-
-<div id="dpad">
-  <div class="row"><div class="key" data-dir="up">▲</div></div>
-  <div class="row">
-    <div class="key" data-dir="left">◀</div>
-    <div class="key" data-dir="down">▼</div>
-    <div class="key" data-dir="right">▶</div>
-  </div>
-</div>
-
-<div id="slot" class="hidden">
-  <div id="slotIcon"></div>
-  <div id="slotName"></div>
-  <div id="slotHint">PRESS SPACE</div>
-</div>
-
-<div id="lives" class="hidden"></div>
-
-<div id="overlayStart" class="overlay">
-  <div class="title">Escape the Void</div>
-  <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
-  <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.<br>Fly into powerups to collect them, then trigger with <b>SPACE</b> (tap the icon on mobile).</div>
-  <button class="btn" id="startBtn">Launch</button>
-  <div id="diffChoice" class="diffchoice">
-    <span class="cclabel">Mode</span>
-    <button class="ccbtn" data-mode="normal">Normal</button>
-    <button class="ccbtn" data-mode="easy">Easy</button>
-  </div>
-  <div id="diffNote"></div>
-  <div class="puchoice">
-    <span class="cclabel">Powerups</span>
-    <button class="ccbtn" data-pu="on">On</button>
-    <button class="ccbtn" data-pu="off">Off</button>
-  </div>
-  <div id="ctrlChoice">
-    <span class="cclabel">Controls</span>
-    <button class="ccbtn" data-mode="keys">Arrow Keys</button>
-    <button class="ccbtn" data-mode="stick">Joystick</button>
-  </div>
-  <div class="legendwrap">
-    <h3 class="legendtitle">Powerups</h3>
-    <div id="legend" class="legend"></div>
-  </div>
-  <div id="boardStart" class="board">
-    <h3>Top Runs</h3>
-    <div class="cols">
-      <div class="col"><h4>📱 Mobile</h4><div class="list" data-dev="mobile"></div></div>
-      <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
+  <!-- ======================= START ======================= -->
+  <section id="screen-start" class="screen active">
+    <div class="brand">
+      <div class="court">1990 · ALL-STARS · PRESENT DAY</div>
+      <h1>HARDWOOD AUCTION</h1>
+      <div class="sub">A two-player NBA drafting duel. Spin the reel, stop on a legend, then out-bid your rival to build the better roster.</div>
     </div>
-  </div>
-</div>
 
-<div id="overlayOver" class="overlay hidden">
-  <div class="title" id="overTitle" style="font-size: clamp(28px,6vw,54px);">Consumed</div>
-  <div class="stat-big" id="finalTime">0.0s</div>
-  <div class="stat-label">Survived</div>
-  <div class="best" id="bestLine"></div>
-  <div id="saveRow" class="hidden">
-    <input id="nameInput" type="text" maxlength="14" placeholder="Your name" autocomplete="off" spellcheck="false" />
-    <button id="saveBtn">Save</button>
-  </div>
-  <div id="boardOver" class="board">
-    <h3>Top Runs</h3>
-    <div class="cols">
-      <div class="col"><h4>📱 Mobile</h4><div class="list" data-dev="mobile"></div></div>
-      <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
+    <div class="card">
+      <div class="names">
+        <div class="name-field p1">
+          <label>Player 1</label>
+          <input id="name1" class="p1" type="text" maxlength="14" placeholder="Player 1" />
+        </div>
+        <div class="name-field p2">
+          <label>Player 2</label>
+          <input id="name2" class="p2" type="text" maxlength="14" placeholder="Player 2" />
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="diffchoice">
-    <span class="cclabel">Mode</span>
-    <button class="ccbtn" data-mode="normal">Normal</button>
-    <button class="ccbtn" data-mode="easy">Easy</button>
-  </div>
-  <div class="puchoice">
-    <span class="cclabel">Powerups</span>
-    <button class="ccbtn" data-pu="on">On</button>
-    <button class="ccbtn" data-pu="off">Off</button>
-  </div>
-  <button class="btn" id="retryBtn">Try Again</button>
+
+    <div class="card rules">
+      <b>How it works</b>
+      <ul>
+        <li>Each of you starts with <b style="color:var(--gold)">25 coins</b> and an empty roster: <b>PG · SG · SF · PF · C</b>.</li>
+        <li>Every round the reel cycles well-known All-Stars for one position. The designated player hits <b>STOP</b> — it slows and lands on a name.</li>
+        <li>An <b>auction</b> opens. The player who stopped it gets a <b>5-second head start</b> to bid before their rival can jump in.</li>
+        <li>Tap to raise. Highest bid when the clock runs out wins the player, pays the coins, and locks them into that roster slot.</li>
+        <li>Exactly <b>2 of each position</b> appear across <b>10 rounds</b>, so both rosters fill up. You can't bid on a slot you've already filled.</li>
+        <li>At the end, the roster with the highest <b>total rating</b> wins. Spend wisely.</li>
+      </ul>
+    </div>
+
+    <div class="center" style="margin-top:22px;">
+      <button id="startBtn" class="btn big">Tip Off →</button>
+    </div>
+    <div class="foot">Best played on one shared screen — two rivals, one device.</div>
+  </section>
+
+  <!-- ======================= DRAFT ======================= -->
+  <section id="screen-draft" class="screen">
+    <div class="topbar">
+      <div class="round-pill" id="roundPill">Round 1 / 10</div>
+      <div class="scoreboard">
+        <div class="team-chip p1" id="chip1"><span class="dot"></span><span class="nm">P1</span> · <span class="coins">25</span></div>
+        <div class="team-chip p2" id="chip2"><span class="dot"></span><span class="nm">P2</span> · <span class="coins">25</span></div>
+      </div>
+    </div>
+
+    <div class="pos-banner">
+      <div class="lbl">This round's position</div>
+      <div class="pos" id="posBanner">—</div>
+    </div>
+
+    <div class="reel-frame">
+      <div class="reel-line"></div>
+      <div class="reel-track" id="reelTrack"></div>
+    </div>
+
+    <!-- STOP phase -->
+    <div id="stopPhase" class="center" style="margin-top:18px;">
+      <div class="phase-note" id="stopNote">Get ready…</div>
+      <button id="stopBtn" class="btn stop big" style="margin-top:10px;">STOP</button>
+    </div>
+
+    <!-- Reveal + auction phase -->
+    <div id="revealPhase" style="display:none;">
+      <div class="reveal">
+        <div class="player-card" id="playerCard">
+          <div class="pos-tag" id="pcPos">C</div>
+          <div class="rating" id="pcRating">OVR 90</div>
+          <div class="pname" id="pcName">—</div>
+          <div class="meta" id="pcMeta">—</div>
+          <div class="star" id="pcStar">★ —</div>
+        </div>
+      </div>
+
+      <div class="auction" id="auction">
+        <div class="bid-display">
+          <div class="amt" id="bidAmt">0<small> coins</small></div>
+          <div class="leader" id="bidLeader">No bids yet</div>
+        </div>
+        <div class="timer-wrap"><div class="timer-bar" id="timerBar"></div></div>
+        <div class="phase-note" id="phaseNote">—</div>
+
+        <div class="bidders">
+          <div class="bidder p1" id="bidder1">
+            <div class="who" id="bw1">P1</div>
+            <div class="bal">Coins: <b id="bal1">25</b></div>
+            <div class="bid-btns">
+              <button class="bid-btn" data-team="0" data-inc="1">+1</button>
+              <button class="bid-btn" data-team="0" data-inc="3">+3</button>
+              <button class="bid-btn" data-team="0" data-inc="5">+5</button>
+            </div>
+            <div class="bid-btns"><button class="bid-btn pass" data-team="0" data-pass="1">Pass</button></div>
+            <div class="status-line" id="stat1"></div>
+          </div>
+          <div class="bidder p2" id="bidder2">
+            <div class="who" id="bw2">P2</div>
+            <div class="bal">Coins: <b id="bal2">25</b></div>
+            <div class="bid-btns">
+              <button class="bid-btn" data-team="1" data-inc="1">+1</button>
+              <button class="bid-btn" data-team="1" data-inc="3">+3</button>
+              <button class="bid-btn" data-team="1" data-inc="5">+5</button>
+            </div>
+            <div class="bid-btns"><button class="bid-btn pass" data-team="1" data-pass="1">Pass</button></div>
+            <div class="status-line" id="stat2"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="center" id="nextWrap" style="display:none; margin-top:16px;">
+        <div class="phase-note" id="resultNote" style="font-size:16px; font-weight:800;"></div>
+        <button id="nextBtn" class="btn" style="margin-top:10px;">Next Round →</button>
+      </div>
+    </div>
+
+    <!-- live rosters -->
+    <div class="rosters" id="rostersDraft"></div>
+  </section>
+
+  <!-- ======================= RESULTS ======================= -->
+  <section id="screen-results" class="screen">
+    <div class="result-head">
+      <div class="court">Final Buzzer</div>
+      <div class="winner-name" id="winnerName">—</div>
+      <div class="result-sub" id="resultSub">—</div>
+    </div>
+    <div class="rosters" id="rostersFinal"></div>
+    <div class="center" style="margin-top:24px;">
+      <button id="againBtn" class="btn big">Run It Back</button>
+    </div>
+    <div class="foot">Ratings reflect peak star power — a little opinion baked in. Built for bragging rights.</div>
+  </section>
+
 </div>
 
 <script>
-(() => {
-  "use strict";
+/* ============================================================
+   HARDWOOD AUCTION — PvP NBA drafting game
+   Single-file, no dependencies. Local hotseat for 2 players.
+   ============================================================ */
 
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
+/* ---------- Player database ----------
+   Well-known All-Stars, 1990 -> present. rating ~ peak star power.
+   era = the decade(s) they starred, for flavor. */
+const DB = {
+  PG: [
+    { n:"Magic Johnson", r:97, e:"'90-'91" },
+    { n:"John Stockton", r:88, e:"'90s" },
+    { n:"Gary Payton", r:90, e:"'90s-'00s" },
+    { n:"Isiah Thomas", r:88, e:"early '90s" },
+    { n:"Tim Hardaway", r:85, e:"'90s" },
+    { n:"Jason Kidd", r:90, e:"'90s-'00s" },
+    { n:"Steve Nash", r:92, e:"'00s" },
+    { n:"Allen Iverson", r:93, e:"'00s" },
+    { n:"Chauncey Billups", r:84, e:"'00s" },
+    { n:"Tony Parker", r:86, e:"'00s-'10s" },
+    { n:"Chris Paul", r:94, e:"'00s-'10s" },
+    { n:"Derrick Rose", r:88, e:"'10s" },
+    { n:"Russell Westbrook", r:93, e:"'10s" },
+    { n:"Stephen Curry", r:98, e:"'10s-now" },
+    { n:"Kyrie Irving", r:90, e:"'10s-now" },
+    { n:"Damian Lillard", r:92, e:"'10s-now" },
+    { n:"John Wall", r:84, e:"'10s" },
+    { n:"Kyle Lowry", r:84, e:"'10s" },
+    { n:"Ja Morant", r:88, e:"now" },
+    { n:"Trae Young", r:86, e:"now" },
+    { n:"Luka Doncic", r:95, e:"now" },
+  ],
+  SG: [
+    { n:"Michael Jordan", r:99, e:"'90s" },
+    { n:"Clyde Drexler", r:90, e:"'90s" },
+    { n:"Reggie Miller", r:87, e:"'90s" },
+    { n:"Mitch Richmond", r:84, e:"'90s" },
+    { n:"Ray Allen", r:88, e:"'00s" },
+    { n:"Kobe Bryant", r:98, e:"'00s" },
+    { n:"Tracy McGrady", r:92, e:"'00s" },
+    { n:"Vince Carter", r:89, e:"'00s" },
+    { n:"Dwyane Wade", r:94, e:"'00s-'10s" },
+    { n:"Manu Ginobili", r:85, e:"'00s" },
+    { n:"Gilbert Arenas", r:85, e:"'00s" },
+    { n:"Michael Redd", r:82, e:"'00s" },
+    { n:"James Harden", r:95, e:"'10s" },
+    { n:"Klay Thompson", r:86, e:"'10s" },
+    { n:"DeMar DeRozan", r:85, e:"'10s-now" },
+    { n:"Bradley Beal", r:84, e:"'10s-now" },
+    { n:"Devin Booker", r:89, e:"now" },
+    { n:"Donovan Mitchell", r:87, e:"now" },
+    { n:"Anthony Edwards", r:89, e:"now" },
+  ],
+  SF: [
+    { n:"Scottie Pippen", r:91, e:"'90s" },
+    { n:"Dominique Wilkins", r:87, e:"early '90s" },
+    { n:"Grant Hill", r:89, e:"'90s-'00s" },
+    { n:"Chris Mullin", r:83, e:"'90s" },
+    { n:"Glen Rice", r:82, e:"'90s" },
+    { n:"Paul Pierce", r:89, e:"'00s" },
+    { n:"LeBron James", r:99, e:"'00s-now" },
+    { n:"Carmelo Anthony", r:90, e:"'00s-'10s" },
+    { n:"Kevin Durant", r:97, e:"'10s-now" },
+    { n:"Kawhi Leonard", r:94, e:"'10s-now" },
+    { n:"Paul George", r:89, e:"'10s-now" },
+    { n:"Jimmy Butler", r:90, e:"'10s-now" },
+    { n:"Andre Iguodala", r:80, e:"'10s" },
+    { n:"Gordon Hayward", r:81, e:"'10s" },
+    { n:"Shawn Marion", r:84, e:"'00s" },
+    { n:"Jayson Tatum", r:93, e:"now" },
+    { n:"Brandon Ingram", r:82, e:"now" },
+    { n:"Khris Middleton", r:83, e:"'10s-now" },
+  ],
+  PF: [
+    { n:"Karl Malone", r:95, e:"'90s" },
+    { n:"Charles Barkley", r:94, e:"'90s" },
+    { n:"Dennis Rodman", r:82, e:"'90s" },
+    { n:"Chris Webber", r:89, e:"'90s-'00s" },
+    { n:"Kevin Garnett", r:95, e:"'00s" },
+    { n:"Tim Duncan", r:96, e:"'00s" },
+    { n:"Dirk Nowitzki", r:95, e:"'00s-'10s" },
+    { n:"Rasheed Wallace", r:83, e:"'00s" },
+    { n:"Amar'e Stoudemire", r:87, e:"'00s" },
+    { n:"Pau Gasol", r:87, e:"'00s-'10s" },
+    { n:"Chris Bosh", r:85, e:"'00s-'10s" },
+    { n:"Blake Griffin", r:86, e:"'10s" },
+    { n:"LaMarcus Aldridge", r:85, e:"'10s" },
+    { n:"Kevin Love", r:85, e:"'10s" },
+    { n:"Anthony Davis", r:93, e:"'10s-now" },
+    { n:"Draymond Green", r:83, e:"'10s-now" },
+    { n:"Giannis Antetokounmpo", r:97, e:"now" },
+    { n:"Julius Randle", r:83, e:"now" },
+    { n:"Domantas Sabonis", r:85, e:"now" },
+    { n:"Pascal Siakam", r:84, e:"now" },
+  ],
+  C: [
+    { n:"Hakeem Olajuwon", r:97, e:"'90s" },
+    { n:"David Robinson", r:95, e:"'90s" },
+    { n:"Patrick Ewing", r:92, e:"'90s" },
+    { n:"Shaquille O'Neal", r:98, e:"'90s-'00s" },
+    { n:"Alonzo Mourning", r:88, e:"'90s-'00s" },
+    { n:"Dikembe Mutombo", r:83, e:"'90s" },
+    { n:"Vlade Divac", r:80, e:"'90s-'00s" },
+    { n:"Ben Wallace", r:83, e:"'00s" },
+    { n:"Yao Ming", r:87, e:"'00s" },
+    { n:"Dwight Howard", r:90, e:"'00s-'10s" },
+    { n:"Marc Gasol", r:85, e:"'10s" },
+    { n:"Al Horford", r:83, e:"'10s-now" },
+    { n:"DeMarcus Cousins", r:87, e:"'10s" },
+    { n:"Rudy Gobert", r:85, e:"'10s-now" },
+    { n:"Karl-Anthony Towns", r:87, e:"'10s-now" },
+    { n:"Joel Embiid", r:95, e:"now" },
+    { n:"Nikola Jokic", r:97, e:"now" },
+    { n:"Bam Adebayo", r:85, e:"now" },
+    { n:"DeAndre Jordan", r:80, e:"'10s" },
+    { n:"Brook Lopez", r:82, e:"'10s-now" },
+  ],
+};
 
-  // ---- Sizing (handle HiDPI) ----
-  // SC scales every world quantity (lengths, speeds, accelerations) to the
-  // viewport, so the game plays proportionally the same on a phone or a monitor
-  // in any orientation. The feel was tuned at ~1100x720; SC=1 there. We key off
-  // sqrt(area) (geometric mean of W,H) so portrait and landscape are symmetric.
-  let W = 0, H = 0, DPR = 1, SC = 1;
-  const REF = Math.sqrt(1100 * 720);
-  const WORLD_SCALE = 0.7;   // shrink every world quantity by 30% for a slower, smaller-feeling game
-  function resize() {
-    const oldW = W, oldH = H, oldSC = SC;
-    // cap pixel ratio: fill cost scales with DPR^2, and the glows are fill-heavy
-    DPR = Math.min(window.devicePixelRatio || 1, 1.5);
-    W = window.innerWidth;
-    H = window.innerHeight;
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
-    canvas.style.width = W + "px";
-    canvas.style.height = H + "px";
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    SC = Math.sqrt(W * H) / REF * WORLD_SCALE;
-    // on a live resize/rotation, rescale the running state so play stays fair
-    if (oldW && oldH) {
-      const rx = W / oldW, ry = H / oldH, rs = SC / oldSC;
-      ship.x *= rx; ship.y *= ry; ship.vx *= rs; ship.vy *= rs;
-      for (const h of holes) { h.x *= rx; h.y *= ry; h.core *= rs; h.reach *= rs; h.str *= rs; }
+const POSITIONS = ["PG","SG","SF","PF","C"];
+const POS_NAMES = { PG:"Point Guard", SG:"Shooting Guard", SF:"Small Forward", PF:"Power Forward", C:"Center" };
+const START_COINS = 25;
+
+const HEADSTART = 5000;   // stopper-only exclusive window (ms)
+const OPEN_TIME = 8000;   // settle time once bidding opens to both (ms)
+const BID_EXTEND = 4000;  // a fresh bid keeps at least this much time on the clock (ms)
+
+/* ---------- Game state ---------- */
+let G = null;   // whole-game state
+let reel = null; // reel animation state
+let A = null;    // current auction state
+
+function newGame(name1, name2){
+  // Build the round schedule: 2 distinct players of each position, order shuffled.
+  const rounds = [];
+  POSITIONS.forEach(pos => {
+    sampleTwo(DB[pos]).forEach(p => rounds.push({ pos, player: p }));
+  });
+  shuffle(rounds);
+
+  return {
+    names: [ name1 || "Player 1", name2 || "Player 2" ],
+    coins: [ START_COINS, START_COINS ],
+    rosters: [ blankRoster(), blankRoster() ],
+    rounds,
+    roundIdx: 0,
+    stopper: 0, // whose turn to hit STOP (alternates each round)
+  };
+}
+function blankRoster(){ const r={}; POSITIONS.forEach(p=>r[p]=null); return r; }
+
+function sampleTwo(arr){
+  const i = (Math.random()*arr.length)|0;
+  let j = (Math.random()*arr.length)|0;
+  while(j===i) j = (Math.random()*arr.length)|0;
+  return [arr[i], arr[j]];
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
+
+/* ---------- DOM helpers ---------- */
+const $ = id => document.getElementById(id);
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  $(id).classList.add('active');
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ============================================================
+   START
+   ============================================================ */
+$("startBtn").addEventListener('click', ()=>{
+  G = newGame($("name1").value.trim(), $("name2").value.trim());
+  showScreen('screen-draft');
+  renderScoreboard();
+  renderRosters('rostersDraft');
+  beginRound();
+});
+
+/* ============================================================
+   ROUND — reel + stop
+   ============================================================ */
+function beginRound(){
+  const round = G.rounds[G.roundIdx];
+  $("roundPill").textContent = `Round ${G.roundIdx+1} / ${G.rounds.length}`;
+  $("posBanner").textContent = round.pos + " — " + POS_NAMES[round.pos];
+  $("stopPhase").style.display = "";
+  $("revealPhase").style.display = "none";
+  $("nextWrap").style.display = "none";
+  $("auction").style.display = "";
+
+  renderScoreboard();
+  $("chip1").classList.toggle('turn', G.stopper===0);
+  $("chip2").classList.toggle('turn', G.stopper===1);
+  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[round.pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> hits STOP`;
+
+  const btn = $("stopBtn");
+  btn.disabled = false;
+  btn.textContent = "STOP";
+  startReel(round.pos);
+}
+
+function startReel(pos){
+  const track = $("reelTrack");
+  const pool = DB[pos];
+  // Build a long scrolling strip: several shuffled copies of the pool.
+  const items = [];
+  for(let k=0;k<8;k++){ items.push(...shuffle(pool.slice())); }
+  track.innerHTML = items.map(p=>`<div class="reel-item">${p.n} <span class="era">${p.e}</span></div>`).join('');
+
+  const ITEM_H = 44;
+  reel = { pos, items, ITEM_H, total: items.length*ITEM_H, offset: 0, speed: 26, decel:false, raf:null };
+
+  const step = ()=>{
+    if(!reel) return;
+    reel.offset += reel.speed;
+    if(reel.decel){
+      reel.speed *= 0.965;
+      if(reel.speed < 0.4){ reel.speed = 0; finishReel(); return; }
+    }
+    // wrap seamlessly through the middle of the strip
+    const wrapPoint = reel.total - reel.items.length*0.25*ITEM_H;
+    if(reel.offset > wrapPoint) reel.offset -= (reel.items.length>>1)*ITEM_H;
+    track.style.transform = `translateY(${-reel.offset}px)`;
+    reel.raf = requestAnimationFrame(step);
+  };
+  reel.raf = requestAnimationFrame(step);
+}
+
+$("stopBtn").addEventListener('click', ()=>{
+  if(!reel || reel.decel) return;
+  $("stopBtn").disabled = true;
+  $("stopBtn").textContent = "…";
+  $("stopNote").textContent = "The reel is slowing down…";
+  reel.decel = true;
+});
+
+function finishReel(){
+  if(reel.raf) cancelAnimationFrame(reel.raf);
+  const track = $("reelTrack");
+  const frameH = 128;
+  // Which item sits on the center line right now?
+  const centerY = reel.offset + frameH/2;
+  let idx = Math.round((centerY - reel.ITEM_H/2) / reel.ITEM_H);
+  idx = ((idx % reel.items.length) + reel.items.length) % reel.items.length;
+  // Snap it perfectly centered.
+  const snapOffset = idx*reel.ITEM_H + reel.ITEM_H/2 - frameH/2;
+  reel.offset = snapOffset;
+  track.style.transition = "transform .25s ease-out";
+  track.style.transform = `translateY(${-reel.offset}px)`;
+  setTimeout(()=>{ track.style.transition=""; revealPlayer(); }, 280);
+}
+
+/* ============================================================
+   REVEAL + AUCTION
+   ============================================================ */
+function revealPlayer(){
+  const round = G.rounds[G.roundIdx];
+  const p = round.player, pos = round.pos;
+
+  $("stopPhase").style.display = "none";
+  $("revealPhase").style.display = "";
+
+  $("pcPos").textContent = pos;
+  $("pcRating").textContent = "OVR " + p.r;
+  $("pcName").textContent = p.n;
+  $("pcMeta").textContent = POS_NAMES[pos] + " · Star era " + p.e;
+  $("pcStar").textContent = "★ " + starWord(p.r) + " — a coveted prize";
+
+  startAuction(round, p, pos);
+}
+
+function starWord(r){
+  if(r>=97) return "All-time great";
+  if(r>=93) return "Superstar";
+  if(r>=88) return "Perennial All-Star";
+  if(r>=84) return "Multi-time All-Star";
+  return "All-Star";
+}
+
+function startAuction(round, player, pos){
+  const stopper = G.stopper, other = 1 - stopper;
+  const eligible = [ G.rosters[0][pos]===null, G.rosters[1][pos]===null ];
+
+  A = { player, pos, stopper, other, eligible,
+        bid:0, leader:-1, passed:[false,false],
+        phase:"headstart", tEnd:0, settled:false, concluded:false,
+        raf:null, claimTimer:null };
+
+  // reset UI
+  $("nextWrap").style.display = "none";
+  $("bw1").textContent = G.names[0];
+  $("bw2").textContent = G.names[1];
+  $("bal1").textContent = G.coins[0];
+  $("bal2").textContent = G.coins[1];
+  setStatus(0,"",""); setStatus(1,"","");
+  $("bidder1").classList.remove('lead'); $("bidder2").classList.remove('lead');
+  $("bidAmt").innerHTML = `0<small> coins</small>`;
+  $("bidLeader").textContent = "No bids yet";
+  $("bidLeader").className = "leader";
+  setTimer(1,false);
+
+  // Uncontested case: only one team still needs this position.
+  if(eligible[0] !== eligible[1]){
+    const w = eligible[0] ? 0 : 1;
+    setStatus(1-w, "filled", `${A.pos} already filled`);
+    $("phaseNote").innerHTML = `<b style="color:${w===0?'var(--p1)':'var(--p2)'}">${G.names[w]}</b> is the only team still needing a ${pos} — claimed uncontested.`;
+    $("bidLeader").textContent = "Uncontested claim";
+    $("bidLeader").className = "leader " + (w===0?"p1":"p2");
+    disableAllBidButtons(); // nothing to bid on — auto-claimed
+    A.claimTimer = setTimeout(()=>concludeAuction(w, 0, `${G.names[w]} fills ${pos} with ${player.n} for free.`), 1500);
+    return;
+  }
+  // Guard: neither eligible (shouldn't occur with a valid schedule).
+  if(!eligible[0] && !eligible[1]){ concludeAuction(-1,0,`${player.n} went unclaimed.`); return; }
+
+  // Both eligible -> auction with a head start for the stopper.
+  setStatus(other, "locked", `Locked out for ${Math.ceil(HEADSTART/1000)}s…`);
+  setStatus(stopper, "", "Your head start — open the bidding!");
+  $("phaseNote").innerHTML = `<b style="color:${stopper===0?'var(--p1)':'var(--p2)'}">${G.names[stopper]}</b> stopped the reel &mdash; <b>5s head start</b> before ${G.names[other]} can bid.`;
+
+  A.tEnd = performance.now() + HEADSTART;
+  updateBidButtons();
+  A.raf = requestAnimationFrame(auctionTick);
+}
+
+function auctionTick(){
+  if(!A || A.settled) return;
+  const now = performance.now();
+  const remain = A.tEnd - now;
+
+  if(A.phase === "headstart"){
+    setTimer(Math.max(0, remain/HEADSTART), false);
+    if(remain <= 0){
+      A.phase = "open";
+      A.tEnd = now + OPEN_TIME;
+      if(A.eligible[A.other]) setStatus(A.other, "", "You can bid now!");
+      $("phaseNote").innerHTML = `Open bidding &mdash; highest bid when the clock hits zero wins.`;
+      updateBidButtons();
+    }
+  } else if(A.phase === "open"){
+    setTimer(Math.max(0, remain/OPEN_TIME), remain < 3000);
+    if(remain <= 0){ settleAuction(); return; }
+  }
+  A.raf = requestAnimationFrame(auctionTick);
+}
+
+function setTimer(frac, warn){
+  const bar = $("timerBar");
+  bar.style.width = Math.max(0, Math.min(1,frac))*100 + "%";
+  bar.classList.toggle('warn', !!warn);
+}
+
+/* ---------- Bid buttons ---------- */
+document.querySelectorAll('.bid-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    if(!A || A.settled) return;
+    const team = +btn.dataset.team;
+    if(btn.dataset.pass){ doPass(team); return; }
+    doBid(team, +btn.dataset.inc);
+  });
+});
+
+function canBid(team){
+  if(!A || A.settled) return false;
+  if(!A.eligible[team]) return false;
+  if(A.passed[team]) return false;
+  if(A.phase==="headstart" && team!==A.stopper) return false;
+  return true;
+}
+
+function doBid(team, inc){
+  if(!canBid(team)) return;
+  let target = A.bid + inc;
+  if(A.leader !== team && target <= A.bid) target = A.bid + 1;
+  if(target > G.coins[team]){
+    setStatus(team, "", `Only ${G.coins[team]} coins!`);
+    return;
+  }
+  A.bid = target;
+  A.leader = team;
+  A.passed = [false,false]; // fresh bid re-opens the floor for both
+  if(A.phase==="open"){
+    const now = performance.now();
+    if(A.tEnd - now < BID_EXTEND) A.tEnd = now + BID_EXTEND;
+  }
+  $("bidAmt").innerHTML = `${A.bid}<small> coins</small>`;
+  $("bidLeader").textContent = G.names[team] + " leads";
+  $("bidLeader").className = "leader " + (team===0?"p1":"p2");
+  $("bidder1").classList.toggle('lead', team===0);
+  $("bidder2").classList.toggle('lead', team===1);
+  setStatus(team, "", "Leading at " + A.bid);
+  if(A.eligible[1-team] && A.phase==="open") setStatus(1-team, "", "Raise to take the lead");
+  updateBidButtons();
+}
+
+function doPass(team){
+  if(!A || A.settled || !A.eligible[team]) return;
+  if(A.phase==="headstart" && team!==A.stopper) return;
+  A.passed[team] = true;
+  setStatus(team, "passed", "Passed");
+  updateBidButtons();
+
+  if(A.leader >= 0){
+    // Settle if everyone other than the leader has passed.
+    const contenders = [0,1].filter(t=>A.eligible[t] && !A.passed[t] && t!==A.leader);
+    if(contenders.length===0){ settleAuction(); return; }
+  } else {
+    // No bids yet. If all eligible teams pass, stopper claims free.
+    const stillIn = [0,1].filter(t=>A.eligible[t] && !A.passed[t]);
+    if(stillIn.length===0){
+      const w = A.eligible[A.stopper] ? A.stopper : (A.eligible[0]?0:1);
+      settleAuction(w, 0);
     }
   }
-  window.addEventListener("resize", resize);
-  resize();
+}
 
-  // ---- Config ----
-  const GRID_SPACING = 30;        // px between grid dots (half again the density)
-  const GRID_OVERFLOW = 0;        // mesh does not extend past the viewport edges
-  const SPAWN_INTERVAL = 10;      // seconds between new voids
-  const THRUST_ACCEL = 600;       // player thrust from WASD/arrows (px/s^2)
-  const MAX_SPEED = 600;          // px/s velocity clamp — tames runaway slingshots
-  const GRAV_STRENGTH = 400;      // base pull of a void (scaled per-void by its random size)
-  const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
-  const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
-  // No medium drag: momentum is conserved. Only gravity and your thrust change
-  // velocity, so with the right tangential speed you can settle into an orbit.
+function settleAuction(forceWinner, forcePrice){
+  if(!A || A.settled) return;
+  A.settled = true;
+  if(A.raf) cancelAnimationFrame(A.raf);
+  setTimer(0,false);
 
-  // ---- Powerups (all timings are editable globals) ----
-  const POWERUP_DURATION = 10;    // seconds an activated powerup runs
-  const POWERUP_LINGER = 30;      // seconds a pickup lingers on the field (long, for testing)
-  const POWERUP_FIRST = 5;        // first pickup appears this many seconds in (same in both modes)
-  const POWERUP_EVERY = 5;        // then one every this many seconds (same in both modes)
-  const MAGNET_RADIUS = 190;      // px: within this range a pickup is pulled toward the ship
-  const TIMEWARP_FACTOR = 0.45;   // world time scale while Time Warp is active
-  const FIRE_INTERVAL = 0.5;      // Blaster: minimum seconds between shots
-  const BULLET_SPEED = 720;       // px/s a fired bullet travels (scaled by SC)
-  const BULLET_LIFE = 1.6;        // seconds a bullet stays alive
-  const POWERUPS = {
-    timewarp: { name: "Time Warp",    color: "#22d3ee", glyph: "◷", desc: "Slows down time" },
-    boost:    { name: "Boost",        color: "#ff8a3d", glyph: "»", desc: "2× engine power" },
-    nerf:     { name: "Reduced Pull", color: "#a855f7", glyph: "◑", desc: "Halves the void pull" },
-    shield:   { name: "Shield",       color: "#34d399", glyph: "",  desc: "Survive anything" },
-    berserk:  { name: "Berserker",    color: "#ef4444", glyph: "✕", desc: "Destroy the void you hit" },
-    ghost:    { name: "Ghost",        color: "#dfe3ee", glyph: "◌", desc: "Ignore gravity" },
-    timeout:  { name: "Time-Out",     color: "#3b82f6", glyph: "‖", desc: "Off-screen timer paused" },
-    reverse:  { name: "Reverse Pull", color: "#eab308", glyph: "⇄", desc: "Voids push you away" },
-    score2x:  { name: "2× Score",     color: "#ec4899", glyph: "2", desc: "Double score" },
-    life:     { name: "Extra Life",   color: "#ff4d6d", glyph: "♥", desc: "+1 life (max 3)" },
-    gun:      { name: "Blaster",      color: "#a3e635", glyph: "◎", desc: "Shoot to destroy voids" },
-  };
-  const POWERUP_KEYS = Object.keys(POWERUPS);
-  // Parked: still fully implemented, just not spawned right now. "timeout" paused
-  // the off-screen return timer, which no longer exists now that walls bounce.
-  const PARKED = ["reverse", "berserk", "timeout"];
-  const POWERUP_SPAWN_KEYS = POWERUP_KEYS.filter((k) => !PARKED.includes(k));
-  const PORTAL_EDGE = "#b478ff";  // purple edge for white wormholes
+  let winner, price;
+  if(forceWinner!==undefined){ winner = forceWinner; price = forcePrice; }
+  else if(A.leader>=0){ winner = A.leader; price = A.bid; }
+  else { winner = A.eligible[A.stopper] ? A.stopper : (A.eligible[0]?0:1); price = 0; }
+  concludeAuction(winner, price, null);
+}
 
-  // ---- State ----
-  let running = false;
-  let lastT = 0;
-  let elapsed = 0;
-  let score = 0;                 // headline / leaderboard value (2x during 2× Score)
-  let spawnTimer = 0;
-  let offT = 0;                  // seconds spent continuously off-screen
-  let best = parseFloat(localStorage.getItem("etv_best") || "0") || 0;
+function concludeAuction(winner, price, note){
+  if(!A || A.concluded) return; // idempotent: never award a round twice
+  A.concluded = true;
+  A.settled = true;
+  if(A.claimTimer){ clearTimeout(A.claimTimer); A.claimTimer = null; }
+  if(A.raf) cancelAnimationFrame(A.raf);
+  disableAllBidButtons();
 
-  let powerups = [];             // pickups currently on the field
-  let held = null;               // powerup key sitting in your slot
-  let active = null;             // { type, t } currently-running buff (one at a time)
-  let powerupClock = 0;          // scaled game-time accumulator for scheduling pickups
-  let nextPowerupAt = 0;
-  let lives = 0;                 // extra hearts (0..3); each absorbs one death
-  let invuln = 0;                // brief invulnerability after spending a life (seconds)
-  let flicker = 0;               // ship blink timer after taking (absorbed) damage
-  let bullets = [];              // active Blaster shots
-  let firing = false;            // fire button / Space held while Blaster is active
-  let fireCd = 0;                // cooldown until the next shot is allowed (seconds)
-  let flash = 0;                 // full-screen flash intensity (wormhole jumps)
-  function isActive(type) { return !!active && active.type === type; }
+  const round = G.rounds[G.roundIdx];
+  const p = round.player, pos = round.pos;
 
-  const keys = { up: false, down: false, left: false, right: false };
-  const ship = { x: W / 2, y: H / 2, vx: 0, vy: 0, angle: -Math.PI / 2 };
-  let holes = [];
-  let particles = [];
-  let shake = 0;
+  if(winner>=0){
+    G.coins[winner] -= price;
+    G.rosters[winner][pos] = { name:p.n, rating:p.r, cost:price, era:p.e };
+  }
 
-  // ---- Input (keyboard thrust) ----
-  const KEYMAP = {
-    ArrowUp: "up", KeyW: "up",
-    ArrowDown: "down", KeyS: "down",
-    ArrowLeft: "left", KeyA: "left",
-    ArrowRight: "right", KeyD: "right",
-  };
-  window.addEventListener("keydown", (e) => {
-    if (e.target && e.target.tagName === "INPUT") return;  // let the name field type
-    const k = KEYMAP[e.code];
-    if (k) { keys[k] = true; e.preventDefault(); return; }
-    if (e.code === "Space") {
-      e.preventDefault();
-      if (!running) { start(); return; }
-      if (isActive("gun")) { firing = true; return; }   // Blaster active: hold to fire
-      activatePowerup();
+  renderScoreboard();
+  renderRosters('rostersDraft', winner, pos);
+
+  $("resultNote").innerHTML = winner>=0
+      ? `<span style="color:${winner===0?'var(--p1)':'var(--p2)'}">${G.names[winner]}</span> lands <b>${p.n}</b> for <b style="color:var(--gold)">${price}</b> coin${price===1?'':'s'}`
+      : (note || `${p.n} went unclaimed.`);
+  $("phaseNote").textContent = "";
+  $("bidLeader").textContent = winner>=0 ? G.names[winner]+" wins" : "Unclaimed";
+  $("nextWrap").style.display = "";
+
+  const last = G.roundIdx >= G.rounds.length - 1;
+  $("nextBtn").textContent = last ? "See Final Result →" : "Next Round →";
+}
+
+$("nextBtn").addEventListener('click', ()=>{
+  if(G.roundIdx >= G.rounds.length - 1){ endGame(); return; }
+  G.roundIdx++;
+  G.stopper = 1 - G.stopper; // alternate the stopper
+  A = null; reel = null;
+  beginRound();
+});
+
+/* ---------- Bid button enable/disable ---------- */
+function updateBidButtons(){
+  document.querySelectorAll('.bid-btn').forEach(btn=>{
+    const team = +btn.dataset.team;
+    if(btn.dataset.pass){
+      btn.disabled = !(A && !A.settled && A.eligible[team] && !A.passed[team] &&
+                       !(A.phase==="headstart" && team!==A.stopper));
       return;
     }
-    if (e.code === "Enter" && !running) { e.preventDefault(); start(); }
+    let ok = canBid(team);
+    if(ok){
+      const inc = +btn.dataset.inc;
+      let target = A.bid + inc;
+      if(A.leader !== team && target <= A.bid) target = A.bid + 1;
+      if(target > G.coins[team]) ok = false;
+    }
+    btn.disabled = !ok;
   });
-  window.addEventListener("keyup", (e) => {
-    if (e.target && e.target.tagName === "INPUT") return;
-    if (e.code === "Space") { firing = false; return; }
-    const k = KEYMAP[e.code];
-    if (k) { keys[k] = false; e.preventDefault(); }
-  });
-  // dropping the ship's keys if focus is lost avoids "stuck thrust"
-  window.addEventListener("blur", () => { keys.up = keys.down = keys.left = keys.right = false; firing = false; });
+}
+function disableAllBidButtons(){ document.querySelectorAll('.bid-btn').forEach(b=>b.disabled=true); }
+function setStatus(team, cls, text){
+  const el = $("stat"+(team+1));
+  el.className = "status-line " + (cls||"");
+  el.textContent = text||"";
+}
 
-  // ---- On-screen arrow keys (touch devices) ----
-  // A keycap D-pad that drives the same keys.* state as the keyboard. Each key
-  // is an independent multi-touch button, so two fingers give diagonals.
-  const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
-  if (isTouch) document.body.classList.add("touch");
-  const dpad = document.getElementById("dpad");
-  // Floating joystick state (stick mode): anchored wherever the finger lands.
-  const joy = { active: false, x: 0, y: 0, id: null, ox: 0, oy: 0, px: 0, py: 0 };
-  function joyR() { return Math.max(48, Math.min(W, H) * 0.13); }
-  function clearInput() {
-    keys.up = keys.down = keys.left = keys.right = false;
-    firing = false;
-    joy.active = false; joy.x = 0; joy.y = 0; joy.id = null;
-    if (dpad) dpad.querySelectorAll(".key.pressed").forEach((k) => k.classList.remove("pressed"));
-  }
-  if (dpad) {
-    dpad.querySelectorAll(".key").forEach((kEl) => {
-      const dir = kEl.getAttribute("data-dir");
-      const press = (e) => {
-        keys[dir] = true; kEl.classList.add("pressed");
-        try { kEl.setPointerCapture(e.pointerId); } catch (_) {}
-        e.preventDefault();
-      };
-      const release = () => { keys[dir] = false; kEl.classList.remove("pressed"); };
-      kEl.addEventListener("pointerdown", press);
-      kEl.addEventListener("pointerup", release);
-      kEl.addEventListener("pointercancel", release);
-    });
-  }
-  window.addEventListener("blur", clearInput);
+/* ============================================================
+   RENDERING
+   ============================================================ */
+function renderScoreboard(){
+  $("chip1").querySelector('.nm').textContent = G.names[0];
+  $("chip2").querySelector('.nm').textContent = G.names[1];
+  $("chip1").querySelector('.coins').textContent = G.coins[0];
+  $("chip2").querySelector('.coins').textContent = G.coins[1];
+}
 
-  // ---- Difficulty: "normal" or "easy" (gentler, and never records scores) ----
-  let difficulty = localStorage.getItem("etv_diff") || "normal";
-  const EASY = {
-    grav: 0.5,        // half the pull
-    thrust: 1.3,      // stronger engines
-    spawn: 17,        // seconds between voids (vs 10)
-    returnLimit: 9,   // longer to fly back on-screen (vs 5)
-  };
-  function isEasy() { return difficulty === "easy"; }
-  function spawnInterval() { return isEasy() ? EASY.spawn : SPAWN_INTERVAL; }
-  function returnLimit() { return isEasy() ? EASY.returnLimit : RETURN_LIMIT; }
-  function thrustAccel() { return THRUST_ACCEL * (isEasy() ? EASY.thrust : 1); }
-  function gravFactor() { return isEasy() ? EASY.grav : 1; }
-  const diffChoices = document.querySelectorAll(".diffchoice");
-  const diffNote = document.getElementById("diffNote");
-  function applyDiff() {
-    diffChoices.forEach((dc) => dc.querySelectorAll(".ccbtn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.mode === difficulty)));
-    if (diffNote) diffNote.textContent = isEasy() ? "Practice mode — scores aren't saved" : "";
-  }
-  diffChoices.forEach((dc) => dc.querySelectorAll(".ccbtn").forEach((b) => {
-    b.addEventListener("click", () => {
-      difficulty = b.dataset.mode; localStorage.setItem("etv_diff", difficulty); applyDiff();
-    });
-  }));
-  applyDiff();
+function rosterTotal(t){ return POSITIONS.reduce((s,pos)=> s + (G.rosters[t][pos]?G.rosters[t][pos].rating:0), 0); }
 
-  // ---- Powerups toggle: on/off. Independent of difficulty; same leaderboard
-  // either way (high scores are shared with and without powerups). ----
-  let powerupsEnabled = (localStorage.getItem("etv_pu") || "on") === "on";
-  const puChoices = document.querySelectorAll(".puchoice");
-  function applyPU() {
-    puChoices.forEach((pc) => pc.querySelectorAll(".ccbtn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.pu === (powerupsEnabled ? "on" : "off"))));
-    document.querySelectorAll(".legendwrap").forEach((el) =>
-      el.style.display = powerupsEnabled ? "" : "none");
-  }
-  puChoices.forEach((pc) => pc.querySelectorAll(".ccbtn").forEach((b) => {
-    b.addEventListener("click", () => {
-      powerupsEnabled = b.dataset.pu === "on";
-      localStorage.setItem("etv_pu", powerupsEnabled ? "on" : "off"); applyPU();
-    });
-  }));
-  applyPU();
-
-  // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
-  let controlMode = localStorage.getItem("etv_ctrl") || "keys";
-  const ctrlChoice = document.getElementById("ctrlChoice");
-  function applyCtrlMode() {
-    document.body.classList.toggle("ctrl-stick", controlMode === "stick");
-    if (ctrlChoice) ctrlChoice.querySelectorAll(".ccbtn").forEach((b) =>
-      b.classList.toggle("active", b.dataset.mode === controlMode));
-  }
-  if (ctrlChoice) ctrlChoice.querySelectorAll(".ccbtn").forEach((b) => {
-    b.addEventListener("click", () => {
-      controlMode = b.dataset.mode; localStorage.setItem("etv_ctrl", controlMode);
-      clearInput(); applyCtrlMode();
-    });
-  });
-  applyCtrlMode();
-
-  // Floating joystick: touch anywhere on the playfield to anchor it, drag to steer.
-  function stickActive() { return running && controlMode === "stick"; }
-  window.addEventListener("pointerdown", (e) => {
-    if (!stickActive() || joy.active) return;
-    if (e.target && e.target.closest && e.target.closest(".overlay, #dpad, #saveRow, #slot")) return;
-    joy.active = true; joy.id = e.pointerId;
-    joy.ox = joy.px = e.clientX; joy.oy = joy.py = e.clientY; joy.x = 0; joy.y = 0;
-  });
-  window.addEventListener("pointermove", (e) => {
-    if (!joy.active || e.pointerId !== joy.id) return;
-    joy.px = e.clientX; joy.py = e.clientY;
-    let dx = e.clientX - joy.ox, dy = e.clientY - joy.oy;
-    const d = Math.hypot(dx, dy), R = joyR();
-    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
-    joy.x = dx / R; joy.y = dy / R;
-  });
-  const endStick = (e) => { if (e.pointerId === joy.id) { joy.active = false; joy.id = null; joy.x = 0; joy.y = 0; } };
-  window.addEventListener("pointerup", endStick);
-  window.addEventListener("pointercancel", endStick);
-
-  // ---- Leaderboard (global via Supabase REST, local fallback) ----
-  const MAX_SCORES = 10;        // entries shown per board
-  // Supabase project (browser-safe: the anon key is meant to ship in clients;
-  // a row-level-security policy limits anon to read + validated insert only).
-  const SB_URL = "https://xjbpmtldoauswnycpfnp.supabase.co";
-  const SB_KEY = "sb_publishable_C7VaDrQaanH_vie76AynPg__T3DpoTW";  // publishable (public) key
-  function lbConfigured() { return !!(SB_URL && SB_KEY); }
-  function sbHeaders(extra) {
-    return Object.assign({ apikey: SB_KEY, Authorization: "Bearer " + SB_KEY }, extra || {});
-  }
-
-  function loadScores() {
-    try { return JSON.parse(localStorage.getItem("etv_scores") || "[]"); } catch (_) { return []; }
-  }
-  let scores = loadScores();      // local backup / offline board
-  let globalScores = [];          // last fetched global board
-  let online = false;             // is the shared board reachable?
-  let lastName = localStorage.getItem("etv_name") || "";
-  let pendingTs = null, pendingScore = 0;
-
-  const nameInput = document.getElementById("nameInput");
-  const saveRow = document.getElementById("saveRow");
-  const saveBtn = document.getElementById("saveBtn");
-  const boardStartEl = document.getElementById("boardStart");
-  const boardOverEl = document.getElementById("boardOver");
-  // Mobile and desktop play at different aspect ratios, so they get separate
-  // ladders. Touch capability tags which one a run belongs to.
-  const DEVICE = isTouch ? "mobile" : "desktop";
-
-  function fmtTime(t) { return t.toFixed(1) + "s"; }
-  function currentList() { return online ? globalScores : scores; }
-  function devOf(s) { return s.dev === "mobile" ? "mobile" : "desktop"; }
-  // keep the best `per` entries of each device category
-  function trimByDev(list, per) {
-    const pick = (d) => list.filter((s) => devOf(s) === d).sort((a, b) => b.time - a.time).slice(0, per);
-    return [...pick("mobile"), ...pick("desktop")];
-  }
-
-  // textContent everywhere -> player names can't inject markup
-  function renderBoard(el, list, hlTs, limit) {
-    el.textContent = "";
-    const top = list.slice().sort((a, b) => b.time - a.time).slice(0, limit);
-    if (!top.length) {
-      const d = document.createElement("div");
-      d.className = "empty"; d.textContent = "No runs yet.";
-      el.appendChild(d); return;
-    }
-    const ol = document.createElement("ol");
-    top.forEach((s, i) => {
-      const li = document.createElement("li");
-      if (hlTs && s.ts === hlTs) li.className = "me";
-      const r = document.createElement("span"); r.className = "rank"; r.textContent = i + 1;
-      const n = document.createElement("span"); n.className = "nm"; n.textContent = s.name;
-      const t = document.createElement("span"); t.className = "tm"; t.textContent = fmtTime(s.time);
-      li.append(r, n, t); ol.appendChild(li);
-    });
-    el.appendChild(ol);
-  }
-  // render the two device columns within a board
-  function renderColumns(boardEl, list, hlTs, limit) {
-    boardEl.querySelectorAll(".list").forEach((el) => {
-      const dev = el.getAttribute("data-dev");
-      renderBoard(el, list.filter((s) => devOf(s) === dev), hlTs, limit);
-    });
-  }
-
-  function setBoardTitles() {
-    const label = !lbConfigured() ? "Top Runs (local)"
-      : online ? "Global Top Runs" : "Top Runs (offline)";
-    document.querySelectorAll(".board h3").forEach((h) => { h.textContent = label; });
-  }
-  function renderBoards(hlTs) {
-    const list = currentList();
-    renderColumns(boardOverEl, list, hlTs || null, MAX_SCORES);
-    renderColumns(boardStartEl, list, null, 5);
-    setBoardTitles();
-  }
-
-  async function fetchGlobal() {
-    if (!lbConfigured()) return null;
-    try {
-      // top runs for each device ladder; the DB handles ordering & concurrency
-      const q = "/rest/v1/scores?select=name,time,ts,dev&order=time.desc&limit=200";
-      const r = await fetch(SB_URL + q, { headers: sbHeaders(), cache: "no-store" });
-      if (!r.ok) return null;
-      const d = await r.json();
-      return Array.isArray(d) ? d : [];
-    } catch (_) { return null; }
-  }
-  async function pushGlobal(entry) {
-    if (!lbConfigured()) return null;
-    try {
-      // a plain insert — no read-modify-write, so simultaneous submits can't clobber
-      const r = await fetch(SB_URL + "/rest/v1/scores", {
-        method: "POST",
-        headers: sbHeaders({ "Content-Type": "application/json", Prefer: "return=minimal" }),
-        body: JSON.stringify({ name: entry.name, time: entry.time, ts: entry.ts, dev: entry.dev }),
-      });
-      if (!r.ok) return null;
-      return await fetchGlobal();   // re-read the merged, sorted board
-    } catch (_) { return null; }
-  }
-  async function refreshGlobal() {
-    const g = await fetchGlobal();
-    online = g != null;
-    if (g) globalScores = g;
-    renderBoards();
-  }
-
-  function offerSave(score) {
-    pendingScore = score; pendingTs = Date.now();
-    nameInput.value = lastName;
-    saveRow.classList.remove("hidden");
-    renderBoards();
-  }
-  async function commitSave() {
-    if (pendingTs == null) return;
-    const name = (nameInput.value.trim() || "Anonymous").slice(0, 14);
-    lastName = name; localStorage.setItem("etv_name", name);
-    const entry = { name, time: pendingScore, ts: pendingTs, dev: DEVICE };
-    // always keep a local copy as an offline fallback (both device ladders)
-    scores.push(entry); scores = trimByDev(scores, 25);
-    localStorage.setItem("etv_scores", JSON.stringify(scores));
-    saveRow.classList.add("hidden");
-    if (lbConfigured()) {
-      saveBtn.disabled = true; saveBtn.textContent = "Saving…";
-      const g = await pushGlobal(entry);
-      saveBtn.disabled = false; saveBtn.textContent = "Save";
-      if (g) { globalScores = g; online = true; }
-    }
-    renderBoards(pendingTs);
-    pendingTs = null;
-  }
-  if (saveBtn) saveBtn.addEventListener("click", commitSave);
-  if (nameInput) nameInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { e.preventDefault(); commitSave(); }
-    e.stopPropagation();
-  });
-
-  renderBoards();      // initial paint (local)
-  refreshGlobal();     // then pull the shared board if one is configured
-
-  // ---- Black holes & wormholes ----
-  function voidCount() { return holes.reduce((a, h) => a + (h.portal ? 0 : 1), 0); }
-  // a position clear of the ship (and, in easy, away from the edges), biased
-  // toward the center: averaging three randoms gives a bell-ish distribution
-  // that peaks in the middle, so voids cluster centrally but can still reach out.
-  function ctrand() { return (Math.random() + Math.random() + Math.random()) / 3; }
-  function holePos() {
-    const mx = isEasy() ? W * 0.24 : 80 * SC;
-    const my = isEasy() ? H * 0.24 : 100 * SC;
-    let x, y, tries = 0;
-    do {
-      x = mx + ctrand() * (W - mx * 2);
-      y = my + ctrand() * (H - my * 2);
-      tries++;
-    } while (Math.hypot(x - ship.x, y - ship.y) < 300 * SC && tries < 30);
-    return [x, y];
-  }
-  function makeVoid(x, y) {
-    const n = holes.length;
-    const size = 0.45 + Math.random() * 0.95;  // 0.45..1.4 overall scale, per void
-    return {
-      x, y, portal: false,
-      str: GRAV_STRENGTH * SC * size * (0.85 + Math.random() * 0.4) * (1 + n * 0.12),
-      core: (4 + size * 6) * SC,
-      reach: (320 + size * 240 + Math.random() * 60) * SC,
-      born: elapsed, spin: (Math.random() < 0.5 ? -1 : 1) * (0.6 + Math.random() * 0.8),
-      phase: Math.random() * Math.PI * 2, grow: 0,
-    };
-  }
-  function makePortal(x, y) {
-    const n = holes.length;
-    return {
-      x, y, portal: true,
-      str: GRAV_STRENGTH * SC * (1 + n * 0.12),   // wormholes pull as hard as a void
-      core: 18 * SC, reach: 460 * SC,
-      born: elapsed, spin: (Math.random() < 0.5 ? -1 : 1) * 1.1,
-      phase: Math.random() * Math.PI * 2, grow: 0,
-    };
-  }
-  function spawnHole() {
-    const [x, y] = holePos();
-    // the next void may instead be a wormhole; odds rise with the void count.
-    // Wormholes are part of the powerup feature set, so they're off in the
-    // no-powerups mode (which is then a pure ship-vs-voids survival run).
-    const isPortal = powerupsEnabled && Math.random() < voidCount() / 10;
-    holes.push(isPortal ? makePortal(x, y) : makeVoid(x, y));
-  }
-  // entering a wormhole rebuilds the field, momentum kept. The destination void
-  // count is an INDEPENDENT gamble — not anchored to where you came from — so a
-  // jump can be a huge relief (8 -> 3) or a huge mistake (3 -> 7).
-  function teleportMap() {
-    const count = 2 + Math.floor(Math.random() * 8);   // 2..9, decoupled from current
-    holes = [];
-    for (let i = 0; i < count; i++) { const [x, y] = holePos(); const v = makeVoid(x, y); v.grow = 1; holes.push(v); }
-    // dramatic jump: blinding flash, hard shake, twin shock rings
-    flash = 1; shake = 26 * SC;
-    burst(ship.x, ship.y, "#ffffff", 80);
-    burst(ship.x, ship.y, PORTAL_EDGE, 56);
-  }
-
-  // Ever-present gravity. Logarithmic falloff: weak but always felt far away,
-  // growing steeply and becoming near-inescapable as you close in. No cutoff —
-  // every void tugs you no matter where you are, and they sum up.
-  function gravityAt(px, py) {
-    let ax = 0, ay = 0;
-    for (const h of holes) {
-      const dx = h.x - px, dy = h.y - py;
-      let r = Math.hypot(dx, dy);
-      if (r < h.core) r = h.core;           // clamp at the horizon to avoid blow-up
-      const f = h.str * gravFactor() * h.grow * Math.log(1 + (GRAV_SCALE * SC) / r);
-      ax += (dx / r) * f;
-      ay += (dy / r) * f;
-    }
-    return [ax, ay];
-  }
-
-  // ---- Particles (death burst) ----
-  function burst(x, y, color, count) {
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = (40 + Math.random() * 320) * SC;
-      particles.push({
-        x, y,
-        vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-        life: 0.6 + Math.random() * 0.7, age: 0,
-        r: (1 + Math.random() * 2.5) * SC, color,
-      });
-    }
-  }
-
-  // ---- Lifecycle ----
-  function reset() {
-    elapsed = 0;
-    score = 0;
-    spawnTimer = 0;
-    offT = 0;
-    holes = [];
-    particles = [];
-    shake = 0;
-    powerups = [];
-    held = null;
-    active = null;
-    lives = 0;
-    invuln = 0;
-    flicker = 0;
-    bullets = [];
-    firing = false;
-    fireCd = 0;
-    flash = 0;
-    powerupClock = 0;
-    nextPowerupAt = POWERUP_FIRST;
-    updateSlot();
-    updateLives();
-    ship.x = W / 2; ship.y = H / 2; ship.vx = 0; ship.vy = 0; ship.angle = -Math.PI / 2;
-    keys.up = keys.down = keys.left = keys.right = false;
-  }
-
-  function start() {
-    reset();
-    clearInput();
-    saveRow.classList.add("hidden");
-    pendingTs = null;
-    nameInput.blur();   // drop focus so game keys aren't swallowed by the field
-    document.getElementById("overlayStart").classList.add("hidden");
-    document.getElementById("overlayOver").classList.add("hidden");
-    document.getElementById("hud").classList.remove("hidden");
-    spawnHole(); // first void immediately
-    running = true;
-    lastT = performance.now();
-    requestAnimationFrame(loop);
-  }
-
-  function gameOver(cause) {
-    running = false;
-    const onscreen = ship.x >= 0 && ship.x <= W && ship.y >= 0 && ship.y <= H;
-    if (onscreen) { burst(ship.x, ship.y, "#8ab0ff", 60); shake = 18 * SC; }
-    document.getElementById("overTitle").textContent =
-      cause === "escaped" ? "Lost to the Void" : "Consumed";
-    document.getElementById("return").style.opacity = "0";
-    clearInput();
-    held = null; active = null; powerups = []; lives = 0; invuln = 0; flicker = 0;
-    bullets = []; firing = false; fireCd = 0; flash = 0; updateSlot(); updateLives();
-    document.getElementById("finalTime").textContent = score.toFixed(1) + "s";
-    if (isEasy()) {
-      // practice run: never touch best score or the leaderboard, and hide the board
-      document.getElementById("bestLine").textContent = "Practice mode — not saved";
-      saveRow.classList.add("hidden");
-      boardOverEl.style.display = "none";
-      pendingTs = null;
-    } else {
-      boardOverEl.style.display = "";
-      if (score > best) { best = score; localStorage.setItem("etv_best", String(best)); }
-      document.getElementById("bestLine").textContent =
-        (score >= best ? "★ New best!  " : "Best  ") + best.toFixed(1) + "s";
-      offerSave(score);   // prompt for a name and show the leaderboard
-    }
-    document.getElementById("hud").classList.add("hidden");
-    // brief delay so the burst is visible before the overlay fades in
-    setTimeout(() => {
-      if (!running) document.getElementById("overlayOver").classList.remove("hidden");
-    }, 650);
-  }
-
-  document.getElementById("startBtn").addEventListener("click", start);
-  document.getElementById("retryBtn").addEventListener("click", start);
-
-  // ---- Powerups ----
-  const slotEl = document.getElementById("slot");
-  const slotIcon = document.getElementById("slotIcon");
-  const slotName = document.getElementById("slotName");
-  const slotHint = document.getElementById("slotHint");
-  const livesEl = document.getElementById("lives");
-  // shield drawn as an actual shield, not a "+"
-  const SHIELD_SVG = (c, sz = 40) => `<svg viewBox="0 0 24 24" width="${sz}" height="${sz}" fill="${c}"><path d="M12 1.5 L3.8 4.4 V11 C3.8 16.6 7.6 20.7 12 22.4 C16.4 20.7 20.2 16.6 20.2 11 V4.4 Z"/></svg>`;
-  function updateSlot() {
-    if (isActive("gun")) {                 // Blaster active: slot becomes a FIRE button
-      const c = POWERUPS.gun.color;
-      slotEl.classList.remove("hidden");
-      slotIcon.innerHTML = ""; slotIcon.textContent = POWERUPS.gun.glyph; slotIcon.style.color = c;
-      slotIcon.style.borderColor = c;
-      slotIcon.style.boxShadow = `0 0 20px ${c}88, inset 0 0 14px ${c}55`;
-      slotName.textContent = "Fire";
-      slotName.style.color = c;
-      slotHint.textContent = isTouch ? "HOLD TO FIRE" : "HOLD SPACE";
-      return;
-    }
-    if (held) {
-      const p = POWERUPS[held];
-      slotEl.classList.remove("hidden");
-      if (held === "shield") { slotIcon.innerHTML = SHIELD_SVG(p.color); }
-      else { slotIcon.innerHTML = ""; slotIcon.textContent = p.glyph; slotIcon.style.color = p.color; }
-      slotIcon.style.borderColor = p.color;
-      slotIcon.style.boxShadow = `0 0 20px ${p.color}88, inset 0 0 14px ${p.color}55`;
-      slotName.textContent = p.name;
-      slotName.style.color = p.color;
-      slotHint.textContent = isTouch ? "TAP" : "PRESS SPACE";
-    } else {
-      slotEl.classList.add("hidden");
-    }
-  }
-  function updateLives() {
-    if (lives > 0) { livesEl.classList.remove("hidden"); livesEl.textContent = "♥".repeat(lives); }
-    else livesEl.classList.add("hidden");
-  }
-  // start-screen legend so players can learn the powerups (symbols + colors)
-  function buildLegend() {
-    const legend = document.getElementById("legend");
-    if (!legend) return;
-    const entries = POWERUP_SPAWN_KEYS.map((k) => ({ key: k, ...POWERUPS[k] }));
-    entries.push({ key: "wormhole", name: "Wormhole", color: "#f4f0ff", desc: "Pulls you in, then teleports you to a fresh map (momentum kept)" });
-    legend.innerHTML = "";
-    for (const e of entries) {
-      const row = document.createElement("div"); row.className = "legrow";
-      const icon = document.createElement("div"); icon.className = "legicon";
-      if (e.key === "shield") icon.innerHTML = SHIELD_SVG(e.color, 22);
-      else if (e.key === "wormhole") icon.innerHTML = `<span style="width:16px;height:16px;border-radius:50%;background:#f4f0ff;border:2px solid ${PORTAL_EDGE};display:inline-block;"></span>`;
-      else { icon.textContent = e.glyph; icon.style.color = e.color; }
-      const txt = document.createElement("div");
-      const nm = document.createElement("div"); nm.className = "legname"; nm.textContent = e.name;
-      const ds = document.createElement("div"); ds.className = "legdesc"; ds.textContent = e.desc;
-      txt.append(nm, ds);
-      row.append(icon, txt);
-      legend.appendChild(row);
-    }
-  }
-  buildLegend();
-  function activatePowerup() {
-    if (!held || active) return;   // one buff at a time; need something in the slot
-    active = { type: held, t: POWERUP_DURATION };
-    held = null;
-    updateSlot();
-  }
-  function fireBullet() {
-    const a = ship.angle, nx = Math.cos(a), ny = Math.sin(a), muzzle = 14 * SC;
-    bullets.push({
-      x: ship.x + nx * muzzle, y: ship.y + ny * muzzle,
-      vx: ship.vx + nx * BULLET_SPEED * SC, vy: ship.vy + ny * BULLET_SPEED * SC,
-      life: BULLET_LIFE, age: 0,
-    });
-    burst(ship.x + nx * muzzle, ship.y + ny * muzzle, "#d9ff7a", 6);
-  }
-  if (slotEl) {
-    slotEl.addEventListener("pointerdown", (e) => {
-      e.preventDefault(); e.stopPropagation();
-      if (isActive("gun")) { firing = true; try { slotEl.setPointerCapture(e.pointerId); } catch (_) {} }
-      else activatePowerup();
-    });
-    const stopFire = () => { firing = false; };
-    slotEl.addEventListener("pointerup", stopFire);
-    slotEl.addEventListener("pointercancel", stopFire);
-    slotEl.addEventListener("pointerleave", stopFire);
-  }
-
-  function spawnPowerup() {
-    const type = POWERUP_SPAWN_KEYS[Math.floor(Math.random() * POWERUP_SPAWN_KEYS.length)];
-    const m = Math.min(W, H) * 0.13;
-    const clear = 180 * SC;                   // prefer spots this far from any void
-    let bx = W / 2, by = H / 2, best = -1;
-    for (let tries = 0; tries < 24; tries++) {
-      const x = m + Math.random() * (W - 2 * m);
-      const y = m + Math.random() * (H - 2 * m);
-      let nd = Infinity;
-      for (const h of holes) nd = Math.min(nd, Math.hypot(x - h.x, y - h.y));
-      if (nd > best) { best = nd; bx = x; by = y; }
-      if (nd > clear) break;                  // far enough from voids — good enough
-    }
-    powerups.push({ type, x: bx, y: by, t: POWERUP_LINGER });
-  }
-
-  // ---- Update ----
-  function update(dt) {
-    // active buff counts down in REAL time; Time Warp scales the *world* only
-    if (active) {
-      const wasGun = active.type === "gun";
-      active.t -= dt;
-      if (active.t <= 0) { active = null; if (wasGun) { firing = false; updateSlot(); } }
-    }
-    if (invuln > 0) invuln -= dt;
-    if (flicker > 0) flicker -= dt;
-    if (flash > 0) flash -= dt * 2.2;   // ~0.45s fade after a wormhole jump
-
-    // Blaster: hold-to-fire, rate-limited to one shot per FIRE_INTERVAL
-    if (fireCd > 0) fireCd -= dt;
-    if (isActive("gun") && firing && fireCd <= 0) { fireBullet(); fireCd = FIRE_INTERVAL; }
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      b.age += dt; b.x += b.vx * dt; b.y += b.vy * dt;
-      let hit = false;
-      for (let n = holes.length - 1; n >= 0; n--) {
-        const h = holes[n];
-        if (h.portal) continue;                       // shots pass through wormholes
-        if (Math.hypot(h.x - b.x, h.y - b.y) < h.core + 6 * SC) {
-          burst(h.x, h.y, "#a3e635", 38); shake = Math.max(shake, 10 * SC);
-          holes.splice(n, 1); hit = true; break;
-        }
+function renderRosters(containerId, hotTeam, hotPos){
+  const c = $(containerId);
+  c.innerHTML = "";
+  for(let t=0;t<2;t++){
+    const tot = rosterTotal(t);
+    const div = document.createElement('div');
+    div.className = "roster " + (t===0?"p1":"p2");
+    const rows = POSITIONS.map(pos=>{
+      const slot = G.rosters[t][pos];
+      const hot = (t===hotTeam && pos===hotPos) ? " hot" : "";
+      if(slot){
+        return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
       }
-      if (hit || b.age > b.life ||
-          b.x < -40 || b.x > W + 40 || b.y < -40 || b.y > H + 40) bullets.splice(i, 1);
-    }
-    const sdt = dt * (isActive("timewarp") ? TIMEWARP_FACTOR : 1);
-
-    elapsed += dt;
-    score += dt * (isActive("score2x") ? 2 : 1);
-
-    // void spawns + powerup pickups (both ride scaled time, so Time Warp slows them)
-    spawnTimer += sdt;
-    if (spawnTimer >= spawnInterval()) { spawnTimer -= spawnInterval(); spawnHole(); }
-    if (powerupsEnabled) {
-      powerupClock += sdt;
-      if (powerupClock >= nextPowerupAt) { spawnPowerup(); nextPowerupAt += POWERUP_EVERY; }
-    }
-
-    for (const h of holes) {
-      h.grow = Math.min(1, h.grow + sdt * 1.2); // ease in pull when born
-      h.phase += h.spin * sdt;
-    }
-
-    // pickups: count down their linger; nearby ones are magnetised in and absorbed.
-    // While a powerup is already held, ignore field pickups entirely — no pull, no
-    // collect — so you never lose your stored one by drifting over another.
-    const collectR = (17 + 14) * SC, magR = MAGNET_RADIUS * SC;
-    for (let i = powerups.length - 1; i >= 0; i--) {
-      const pu = powerups[i];
-      pu.t -= dt;
-      if (!held) {
-        const dx = ship.x - pu.x, dy = ship.y - pu.y, dist = Math.hypot(dx, dy) + 0.001;
-        if (dist < collectR) {
-          if (pu.type === "life") { lives = Math.min(3, lives + 1); updateLives(); }
-          else { held = pu.type; updateSlot(); }
-          powerups.splice(i, 1); continue;
-        }
-        if (dist < magR) {
-          const pull = 1 - dist / magR;                // 0 at the edge -> 1 near the ship
-          const speed = (28 + 200 * pull) * SC;         // gentle magnet; accelerates as it closes in
-          pu.x += (dx / dist) * speed * dt;
-          pu.y += (dy / dist) * speed * dt;
-          pu.mag = true;                               // flag for a stretched glow while pulled
-        } else pu.mag = false;
-      } else pu.mag = false;
-      if (pu.t <= 0) powerups.splice(i, 1);
-    }
-
-    // ship physics: player thrust (keys / arrows / floating joystick) + gravity
-    let ix = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-    let iy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
-    if (ix || iy) { const il = Math.hypot(ix, iy); ix /= il; iy /= il; } // normalize keys
-    if (joy.active && (joy.x || joy.y)) { ix = joy.x; iy = joy.y; }      // analog joystick
-    let thrusting = false;
-    let m = Math.hypot(ix, iy);
-    if (m > 0.001) {
-      if (m > 1) { ix /= m; iy /= m; }   // partial joystick deflection = partial thrust
-      const tacc = thrustAccel() * (isActive("boost") ? 2 : 1) * SC;   // Boost = 2x engines
-      ship.vx += ix * tacc * sdt;
-      ship.vy += iy * tacc * sdt;
-      ship.angle = Math.atan2(iy, ix);
-      thrusting = true;
-    }
-
-    // gravity, modified by powerups: Reduced Pull halves it, Reverse flips it,
-    // Ghost zeroes it
-    let gmult = isActive("nerf") ? 0.5 : 1;
-    if (isActive("reverse")) gmult *= -1;
-    if (isActive("ghost")) gmult = 0;
-    const [gx, gy] = gravityAt(ship.x, ship.y);
-    ship.vx += gx * gmult * sdt;
-    ship.vy += gy * gmult * sdt;
-
-    // velocity clamp: orbital speeds sit well under this, so interior play is
-    // unchanged — it only caps the runaway speed a slingshot can hand you, so
-    // you can't be flung off-screen faster than you can react
-    const vmax = MAX_SPEED * SC, spd = Math.hypot(ship.vx, ship.vy);
-    if (spd > vmax) { ship.vx = ship.vx / spd * vmax; ship.vy = ship.vy / spd * vmax; }
-
-    // no drag — pure momentum
-    ship.x += ship.vx * sdt;
-    ship.y += ship.vy * sdt;
-
-    // when coasting, point the nose along travel so the drift reads clearly
-    if (!thrusting && Math.hypot(ship.vx, ship.vy) > 6 * SC) ship.angle = Math.atan2(ship.vy, ship.vx);
-
-    // bounce off the walls instead of drifting off-screen. We only reflect when
-    // the ship is actually moving INTO a wall, so it doesn't jitter when held
-    // against one. A little energy is lost each bounce (restitution < 1).
-    const wm = 10 * SC, REST = 0.86;
-    let bv = 0;
-    if (ship.x < wm)          { ship.x = wm;     if (ship.vx < 0) { bv = Math.max(bv, -ship.vx); ship.vx = -ship.vx * REST; } }
-    else if (ship.x > W - wm) { ship.x = W - wm; if (ship.vx > 0) { bv = Math.max(bv,  ship.vx); ship.vx = -ship.vx * REST; } }
-    if (ship.y < wm)          { ship.y = wm;     if (ship.vy < 0) { bv = Math.max(bv, -ship.vy); ship.vy = -ship.vy * REST; } }
-    else if (ship.y > H - wm) { ship.y = H - wm; if (ship.vy > 0) { bv = Math.max(bv,  ship.vy); ship.vy = -ship.vy * REST; } }
-    if (bv > 140 * SC) { shake = Math.max(shake, Math.min(12, bv / 80) * SC); burst(ship.x, ship.y, "#8ab0ff", 6); }
-    offT = 0;   // off-screen death retired now that walls contain the ship
-
-    // hole proximity: wormholes teleport you; voids kill (unless Shield / invuln /
-    // a spare life), and Berserker destroys them
-    let danger = false;
-    for (let n = holes.length - 1; n >= 0; n--) {
-      const h = holes[n];
-      const d = Math.hypot(h.x - ship.x, h.y - ship.y);
-      if (h.portal) {
-        if (d < h.core + 7 * SC) { teleportMap(); break; }   // through the wormhole
-        continue;                                            // portals don't threaten or glow danger
-      }
-      if (d < h.core + 7 * SC) {
-        if (isActive("shield") || invuln > 0) { flicker = Math.max(flicker, 0.3); }  // tank it, blink
-        else if (isActive("berserk")) { burst(h.x, h.y, "#ff8a8a", 40); shake = 12 * SC; holes.splice(n, 1); continue; }
-        else if (lives > 0) {   // spend a life: keep momentum, brief invuln, blink
-          lives--; updateLives(); invuln = 1.4; flicker = 1.4;
-          burst(ship.x, ship.y, "#ff4d6d", 40); shake = 14 * SC;
-        } else { gameOver(); return; }
-      }
-      if (d < h.core + 70 * SC) danger = true;
-    }
-    document.getElementById("warn").style.opacity = danger ? "1" : "0";
-
-    // particles
-    for (const p of particles) {
-      p.age += dt;
-      p.x += p.vx * dt; p.y += p.vy * dt;
-      p.vx *= 0.96; p.vy *= 0.96;
-    }
-    particles = particles.filter((p) => p.age < p.life);
-
-    if (shake > 0) shake = Math.max(0, shake - dt * 40 * SC);
+      return `<div class="slot empty"><span class="pp">${pos}</span><span class="nn">— empty —</span></div>`;
+    }).join('');
+    div.innerHTML = `<h3><span class="nm">${G.names[t]}</span><span class="tot">Σ ${tot} · ${G.coins[t]}c left</span></h3>${rows}`;
+    c.appendChild(div);
   }
+}
 
-  // ---- Render ----
-  // The undistorted dot field is pre-rendered once to an offscreen layer and
-  // blitted each frame (one cheap draw). Only the dots inside a void's reach are
-  // erased and redrawn warped — so per-frame cost is independent of total dots.
-  let gBaseX = null, gBaseY = null;
-  let gCols = 0, gRows = 0, gW = -1, gH = -1, gGS = -1, gDot = 1;
-  let gridLayer = null, glCtx = null;
-  const GRID_COLOR = "rgba(120,150,235,0.40)";
+/* ============================================================
+   RESULTS
+   ============================================================ */
+function endGame(){
+  showScreen('screen-results');
+  const totals = [rosterTotal(0), rosterTotal(1)];
+  let winner = totals[0]>totals[1] ? 0 : (totals[1]>totals[0] ? 1 : -1);
 
-  function buildGridBase(gs) {
-    const ofx = GRID_OVERFLOW * W, ofy = GRID_OVERFLOW * H;
-    const x0 = -ofx, y0 = -ofy;
-    gCols = Math.ceil((W + 2 * ofx) / gs) + 1;
-    gRows = Math.ceil((H + 2 * ofy) / gs) + 1;
-    const tot = gCols * gRows;
-    gBaseX = new Float64Array(tot); gBaseY = new Float64Array(tot);
-    for (let j = 0; j < gRows; j++) {
-      const oy = y0 + j * gs;
-      for (let i = 0; i < gCols; i++) { const idx = j * gCols + i; gBaseX[idx] = x0 + i * gs; gBaseY[idx] = oy; }
-    }
-    gDot = Math.max(1, 1.5 * SC);
-    gW = W; gH = H; gGS = gs;
-
-    // pre-render the on-screen (undistorted) dots once
-    if (!gridLayer) { gridLayer = document.createElement("canvas"); glCtx = gridLayer.getContext("2d"); }
-    gridLayer.width = Math.max(1, Math.floor(W * DPR));
-    gridLayer.height = Math.max(1, Math.floor(H * DPR));
-    glCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    glCtx.clearRect(0, 0, W, H);
-    const half = gDot / 2, lp = new Path2D();
-    for (let idx = 0; idx < tot; idx++) {
-      const x = gBaseX[idx], y = gBaseY[idx];
-      if (x < -gDot || x > W + gDot || y < -gDot || y > H + gDot) continue;
-      lp.rect(x - half, y - half, gDot, gDot);
-    }
-    glCtx.fillStyle = GRID_COLOR;
-    glCtx.fill(lp);
+  const wn = $("winnerName");
+  if(winner===-1){
+    wn.textContent = "It's a Tie!";
+    wn.className = "winner-name tie";
+    $("resultSub").textContent = `Both rosters rated ${totals[0]}. Split the trophy.`;
+  } else {
+    wn.textContent = G.names[winner] + " wins!";
+    wn.className = "winner-name " + (winner===0?"p1":"p2");
+    const margin = Math.abs(totals[0]-totals[1]);
+    const spent = START_COINS - G.coins[winner];
+    $("resultSub").innerHTML = `Roster rating <b style="color:var(--gold)">${totals[winner]}</b> vs ${totals[1-winner]} — a ${margin}-point edge, built for ${spent} of ${START_COINS} coins.`;
   }
+  renderRosters('rostersFinal', -1, null);
+}
 
-  function drawGrid() {
-    const gs = GRID_SPACING * SC;
-    if (W !== gW || H !== gH || gs !== gGS) buildGridBase(gs);
-
-    // 1) blit the whole undistorted dot field — one draw, independent of count
-    ctx.drawImage(gridLayer, 0, 0, W, H);
-    const HN = holes.length;
-    if (HN === 0) return;
-
-    const x0 = -GRID_OVERFLOW * W, y0 = -GRID_OVERFLOW * H;
-    const half = gDot / 2;
-
-    // 2) erase each void's reach box back to the background colour
-    ctx.fillStyle = "#05060c";
-    const boxes = [];
-    for (let n = 0; n < HN; n++) {
-      const h = holes[n], reach = h.reach;
-      let i0 = Math.floor((h.x - reach - x0) / gs), i1 = Math.ceil((h.x + reach - x0) / gs);
-      let j0 = Math.floor((h.y - reach - y0) / gs), j1 = Math.ceil((h.y + reach - y0) / gs);
-      if (i0 < 0) i0 = 0; if (j0 < 0) j0 = 0;
-      if (i1 > gCols - 1) i1 = gCols - 1; if (j1 > gRows - 1) j1 = gRows - 1;
-      if (i1 < i0 || j1 < j0) continue;
-      boxes.push(i0, i1, j0, j1);
-      const ex = x0 + i0 * gs - half, ey = y0 + j0 * gs - half;
-      ctx.fillRect(ex, ey, (i1 - i0) * gs + gDot, (j1 - j0) * gs + gDot);
-    }
-
-    // 3) redraw just those dots, displaced by every void that reaches them
-    const warpMul = isActive("nerf") ? 0.5 : 1;   // weaker warp while Reduced Pull is on
-    const path = new Path2D();
-    for (let bi = 0; bi < boxes.length; bi += 4) {
-      const i0 = boxes[bi], i1 = boxes[bi + 1], j0 = boxes[bi + 2], j1 = boxes[bi + 3];
-      for (let j = j0; j <= j1; j++) {
-        const oy = y0 + j * gs;
-        for (let i = i0; i <= i1; i++) {
-          const ox = x0 + i * gs;
-          let dx = 0, dy = 0;
-          for (let n = 0; n < HN; n++) {
-            const h = holes[n];
-            const vx = ox - h.x, vy = oy - h.y;
-            const reach = h.reach, d2 = vx * vx + vy * vy;
-            if (d2 > reach * reach) continue;
-            const dist = Math.sqrt(d2) + 0.001;
-            const t = 1 - dist / reach;
-            const k = (h.core * 9 * h.grow) * t / dist;
-            const sw = (h.spin * 0.35 * h.grow) * t;
-            dx += -vx * k - vy * sw;
-            dy += -vy * k + vx * sw;
-          }
-          path.rect(ox + dx * warpMul - half, oy + dy * warpMul - half, gDot, gDot);
-        }
-      }
-    }
-    ctx.fillStyle = GRID_COLOR;
-    ctx.fill(path);
-  }
-
-  // Pre-render the soft accretion glow once; blitting a sprite each frame is
-  // far cheaper than rebuilding a big radial gradient per void per frame.
-  function makeSprite(stops, inner) {
-    const s = 128, c = document.createElement("canvas");
-    c.width = c.height = s;
-    const g = c.getContext("2d");
-    const grd = g.createRadialGradient(s / 2, s / 2, (s / 2) * (inner || 0), s / 2, s / 2, s / 2);
-    for (const [o, col] of stops) grd.addColorStop(o, col);
-    g.fillStyle = grd; g.fillRect(0, 0, s, s);
-    return c;
-  }
-  const glowSprite = makeSprite([[0, "rgba(120,90,255,0.30)"], [0.25, "rgba(80,60,200,0.14)"], [1, "rgba(0,0,0,0)"]], 0);
-  const rimSprite = makeSprite([[0, "rgba(0,0,0,1)"], [0.6, "rgba(60,40,160,0.9)"], [1, "rgba(0,0,0,0)"]], 0.41);
-
-  // wormhole: white core, purple swirling edge
-  function drawPortal(h) {
-    const R = h.core, Rg = h.reach * 0.5;
-    if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) return;
-    ctx.save();
-    ctx.globalAlpha = 0.5;
-    const g = ctx.createRadialGradient(h.x, h.y, R * 0.4, h.x, h.y, Rg);
-    g.addColorStop(0, "rgba(180,120,255,0.40)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(h.x, h.y, Rg, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.translate(h.x, h.y); ctx.rotate(h.phase);
-    for (let a = 0; a < 3; a++) {
-      ctx.rotate((Math.PI * 2) / 3);
-      ctx.strokeStyle = `rgba(180,120,255,${0.55 - a * 0.13})`;
-      ctx.lineWidth = 2.5 * SC;
-      ctx.beginPath(); ctx.arc(0, 0, R * (1.5 + a * 0.75), 0.2, Math.PI * 1.5); ctx.stroke();
-    }
-    ctx.restore();
-    ctx.strokeStyle = PORTAL_EDGE; ctx.lineWidth = 3.5 * SC;
-    ctx.beginPath(); ctx.arc(h.x, h.y, R * 1.25, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#f4f0ff";
-    ctx.beginPath(); ctx.arc(h.x, h.y, R, 0, Math.PI * 2); ctx.fill();
-  }
-
-  function drawHoles() {
-    const vis = isActive("nerf") ? 0.68 : 1;   // Reduced Pull: voids look smaller
-    for (const h of holes) {
-      if (h.portal) { drawPortal(h); continue; }
-      const R = h.core;
-      const Rg = h.reach * 0.55 * vis;
-      // skip voids whose glow is fully off-screen (they still pull, just unseen)
-      if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) continue;
-      // accretion glow (cached sprite, scaled to this void)
-      ctx.drawImage(glowSprite, h.x - Rg, h.y - Rg, Rg * 2, Rg * 2);
-
-      // swirling accretion ring
-      ctx.save();
-      ctx.translate(h.x, h.y);
-      ctx.rotate(h.phase);
-      for (let a = 0; a < 3; a++) {
-        ctx.rotate((Math.PI * 2) / 3);
-        ctx.strokeStyle = `rgba(150,120,255,${0.20 - a * 0.04})`;
-        ctx.lineWidth = 2.5 * SC;
-        ctx.beginPath();
-        ctx.arc(0, 0, R * vis * (2.2 + a * 1.1), 0.2, Math.PI * 1.4);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      // hot inner rim (cached sprite)
-      const Rr = R * 1.7 * vis;
-      ctx.drawImage(rimSprite, h.x - Rr, h.y - Rr, Rr * 2, Rr * 2);
-
-      // pure black core
-      ctx.fillStyle = "#000";
-      ctx.beginPath();
-      ctx.arc(h.x, h.y, R * vis, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  function drawShip() {
-    // blink on/off rapidly while flickering from absorbed damage
-    const blink = flicker > 0 ? ((Math.floor(performance.now() / 70) % 2) ? 1 : 0.18) : 1;
-    ctx.save();
-    ctx.globalAlpha = blink;
-    ctx.translate(ship.x, ship.y);
-    ctx.rotate(ship.angle);
-    ctx.scale(SC, SC);   // draw the ship in fixed local units, scaled to viewport
-
-    // engine trail (sp is a scaled speed; convert back to local units for length)
-    const sp = Math.hypot(ship.vx, ship.vy);
-    if (sp > 20 * SC) {
-      const tl = Math.min(40, sp * 0.05 / SC);
-      const g = ctx.createLinearGradient(-tl - 8, 0, -6, 0);
-      g.addColorStop(0, "rgba(120,180,255,0)");
-      g.addColorStop(1, "rgba(150,200,255,0.7)");
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(-6, -4);
-      ctx.lineTo(-tl - 8, 0);
-      ctx.lineTo(-6, 4);
-      ctx.closePath();
-      ctx.fill();
-    }
-
-    // body
-    ctx.fillStyle = "#e9efff";
-    ctx.strokeStyle = "#6f8bff";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(13, 0);
-    ctx.lineTo(-9, -8);
-    ctx.lineTo(-4, 0);
-    ctx.lineTo(-9, 8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-
-    // cockpit
-    ctx.fillStyle = "#3a52d8";
-    ctx.beginPath();
-    ctx.arc(2, 0, 2.6, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.restore();
-
-    // soft halo
-    ctx.globalAlpha = 0.5 * blink;
-    const halo = ctx.createRadialGradient(ship.x, ship.y, 2 * SC, ship.x, ship.y, 22 * SC);
-    halo.addColorStop(0, "rgba(140,180,255,0.5)");
-    halo.addColorStop(1, "rgba(140,180,255,0)");
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 22 * SC, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
-
-  function drawParticles() {
-    for (const p of particles) {
-      const t = 1 - p.age / p.life;
-      ctx.globalAlpha = Math.max(0, t);
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  // arrow pinned to the screen edge pointing at the ship when it flies off-view
-  function drawOffscreenIndicator() {
-    const onX = ship.x >= 0 && ship.x <= W;
-    const onY = ship.y >= 0 && ship.y <= H;
-    if (onX && onY) return;
-    const pad = 26;
-    const cx = Math.max(pad, Math.min(W - pad, ship.x));
-    const cy = Math.max(pad, Math.min(H - pad, ship.y));
-    const ang = Math.atan2(ship.y - cy, ship.x - cx);
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(ang);
-    ctx.fillStyle = "rgba(150,185,255,0.95)";
-    ctx.beginPath();
-    ctx.moveTo(13, 0); ctx.lineTo(-7, -8); ctx.lineTo(-7, 8); ctx.closePath();
-    ctx.fill();
-    ctx.restore();
-    const d = Math.round(Math.hypot(ship.x - cx, ship.y - cy));
-    ctx.fillStyle = "rgba(150,185,255,0.85)";
-    ctx.font = "600 12px -apple-system, system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(d + "px", cx, cy - 16);
-    ctx.textAlign = "left";
-  }
-
-  // subtle ring + knob shown only while the floating joystick is being dragged
-  function drawStick() {
-    if (!(running && controlMode === "stick" && joy.active)) return;
-    const R = joyR();
-    let dx = joy.px - joy.ox, dy = joy.py - joy.oy;
-    const d = Math.hypot(dx, dy);
-    if (d > R) { dx = dx / d * R; dy = dy / d * R; }
-    ctx.save();
-    ctx.strokeStyle = "rgba(150,170,255,0.45)"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(joy.ox, joy.oy, R, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "rgba(140,170,255,0.55)";
-    ctx.beginPath(); ctx.arc(joy.ox + dx, joy.oy + dy, R * 0.4, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-
-  function drawShieldShape(g, cx, cy, r, color) {
-    const w = r * 0.82;
-    g.beginPath();
-    g.moveTo(cx, cy - r);
-    g.lineTo(cx + w, cy - r * 0.5);
-    g.lineTo(cx + w, cy + r * 0.12);
-    g.quadraticCurveTo(cx + w, cy + r * 0.72, cx, cy + r);
-    g.quadraticCurveTo(cx - w, cy + r * 0.72, cx - w, cy + r * 0.12);
-    g.lineTo(cx - w, cy - r * 0.5);
-    g.closePath();
-    g.fillStyle = color; g.fill();
-  }
-
-  // floating pickups: a colored orb + glyph, with the name in plain text below
-  function drawPowerups() {
-    for (const pu of powerups) {
-      const p = POWERUPS[pu.type];
-      let s = 17 * SC;
-      if (pu.t < 3) s *= 1 + 0.2 * Math.sin(performance.now() / 65);  // expiry wiggle
-      ctx.save();
-      ctx.translate(pu.x, pu.y);
-      ctx.globalAlpha = pu.mag ? 0.7 : 0.45;        // brighter halo while being absorbed
-      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * (pu.mag ? 2.8 : 2.3));
-      g.addColorStop(0, p.color); g.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, s * (pu.mag ? 2.8 : 2.3), 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = "rgba(8,10,20,0.88)"; ctx.strokeStyle = p.color; ctx.lineWidth = 2 * SC;
-      ctx.beginPath(); ctx.arc(0, 0, s, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      if (pu.type === "shield") {
-        drawShieldShape(ctx, 0, 0, s * 0.62, p.color);
-      } else {
-        ctx.fillStyle = p.color;
-        ctx.font = `800 ${Math.round(s * 1.15)}px -apple-system, system-ui, sans-serif`;
-        ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(p.glyph, 0, s * 0.05);
-      }
-      // name in plain (unbold) text right under the pickup
-      ctx.fillStyle = p.color;
-      ctx.font = `500 ${Math.round(13 * SC)}px -apple-system, system-ui, sans-serif`;
-      ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
-      ctx.fillText(p.name, 0, s + 21 * SC);
-      ctx.restore();
-    }
-    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  }
-
-  // glowing lime projectiles fired by the Blaster
-  function drawBullets() {
-    if (!bullets.length) return;
-    ctx.save();
-    for (const b of bullets) {
-      const r = 3.2 * SC;
-      const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, r * 3);
-      g.addColorStop(0, "#d9ff7a"); g.addColorStop(0.4, "#a3e635"); g.addColorStop(1, "rgba(163,230,53,0)");
-      ctx.globalAlpha = 0.9; ctx.fillStyle = g;
-      ctx.beginPath(); ctx.arc(b.x, b.y, r * 3, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1; ctx.fillStyle = "#eaffb0";
-      ctx.beginPath(); ctx.arc(b.x, b.y, r, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  // colored orb around the ship while a buff is active, with a depletion arc
-  function drawOrb() {
-    if (!active) return;
-    const c = POWERUPS[active.type].color;
-    const R = 24 * SC * (1 + 0.05 * Math.sin(performance.now() / 110));
-    ctx.save();
-    ctx.globalAlpha = 0.16; ctx.fillStyle = c;
-    ctx.beginPath(); ctx.arc(ship.x, ship.y, R, 0, Math.PI * 2); ctx.fill();
-    ctx.globalAlpha = 0.85; ctx.strokeStyle = c; ctx.lineWidth = 2 * SC;
-    ctx.beginPath(); ctx.arc(ship.x, ship.y, R, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.lineWidth = 3 * SC;
-    const frac = active.t / POWERUP_DURATION;
-    ctx.beginPath();
-    ctx.arc(ship.x, ship.y, R + 4 * SC, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // while a buff is running: big bold name, plain description, and a countdown
-  // bar (so timing is visible even when the ship is off-screen)
-  function drawActiveLabel() {
-    if (!active) return;
-    const p = POWERUPS[active.type];
-    ctx.save();
-    ctx.textAlign = "center";
-    ctx.fillStyle = p.color;
-    ctx.font = "800 30px -apple-system, system-ui, sans-serif";
-    ctx.fillText(p.name, W / 2, 80);
-    ctx.fillStyle = "rgba(222,230,255,0.85)";
-    ctx.font = "400 15px -apple-system, system-ui, sans-serif";
-    ctx.fillText(p.desc, W / 2, 104);
-    // countdown bar
-    const bw = 200, bh = 6, bx = W / 2 - bw / 2, by = 116;
-    ctx.fillStyle = "rgba(255,255,255,0.16)";
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = p.color;
-    ctx.fillRect(bx, by, bw * Math.max(0, active.t / POWERUP_DURATION), bh);
-    ctx.restore();
-    ctx.textAlign = "left";
-  }
-
-  function render() {
-    ctx.save();
-    if (shake > 0) {
-      ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
-    }
-
-    // background
-    ctx.fillStyle = "#05060c";
-    ctx.fillRect(-20, -20, W + 40, H + 40);
-
-    drawGrid();
-    drawHoles();
-    drawPowerups();
-    drawBullets();
-    drawParticles();
-    if (running) { drawOrb(); drawShip(); drawOffscreenIndicator(); }
-
-    ctx.restore();
-
-    // wormhole jump flash (screen-space, fades fast), centered on the ship
-    if (flash > 0) {
-      const f = Math.min(1, flash);
-      const cx = Math.max(0, Math.min(W, ship.x)), cy = Math.max(0, Math.min(H, ship.y));
-      const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.hypot(W, H) * 0.6);
-      g.addColorStop(0, `rgba(255,255,255,${0.85 * f})`);
-      g.addColorStop(0.45, `rgba(196,150,255,${0.7 * f})`);
-      g.addColorStop(1, "rgba(120,60,200,0)");
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    }
-
-    drawStick();   // screen-space UI, drawn outside the shake transform
-    if (running) drawActiveLabel();
-  }
-
-  // ---- Main loop ----
-  function loop(now) {
-    let dt = (now - lastT) / 1000;
-    lastT = now;
-    if (dt > 0.05) dt = 0.05; // clamp big frame gaps
-
-    if (running) {
-      update(dt);
-      document.getElementById("hudTime").textContent = score.toFixed(1);
-      document.getElementById("hudHoles").textContent = holes.length;
-      const ret = document.getElementById("return");
-      if (running && offT > 0 && !isActive("timeout")) {
-        document.getElementById("returnNum").textContent = Math.ceil(returnLimit() - offT);
-        ret.style.opacity = "1";
-      } else {
-        ret.style.opacity = "0";
-      }
-    } else {
-      // keep particles animating during the death burst
-      for (const p of particles) {
-        p.age += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.96; p.vy *= 0.96;
-      }
-      particles = particles.filter((p) => p.age < p.life);
-      if (shake > 0) shake = Math.max(0, shake - dt * 40);
-    }
-
-    render();
-
-    if (running || particles.length > 0 || shake > 0) requestAnimationFrame(loop);
-  }
-
-  // initial idle render (menu background)
-  render();
-})();
+$("againBtn").addEventListener('click', ()=>{
+  const n1 = G.names[0], n2 = G.names[1];
+  G = newGame(n1, n2);
+  showScreen('screen-draft');
+  renderScoreboard();
+  renderRosters('rostersDraft');
+  beginRound();
+});
 </script>
 </body>
 </html>
