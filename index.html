@@ -178,6 +178,8 @@
   .bidder.p1 { border-color: rgba(255,122,60,.5);} .bidder.p2 { border-color: rgba(60,166,255,.5);}
   .bidder.lead.p1 { box-shadow: 0 0 26px rgba(255,122,60,.5); border-color: var(--p1);}
   .bidder.lead.p2 { box-shadow: 0 0 26px rgba(60,166,255,.5); border-color: var(--p2);}
+  .bidder.act { border-color: var(--gold); box-shadow: 0 0 24px rgba(255,209,92,.35); }
+  .bidder:not(.act) .bid-btn { opacity: .5; }
   .bidder .who { font-weight:900; font-size:15px; }
   .bidder.p1 .who { color: var(--p1);} .bidder.p2 .who { color: var(--p2);}
   .bidder .bal { font-size:12px; color: var(--muted); margin-top:2px; }
@@ -309,8 +311,8 @@
             <div class="bal">Coins: <b id="bal1">25</b></div>
             <div class="bid-btns">
               <button class="bid-btn" data-team="0" data-inc="1">+1</button>
+              <button class="bid-btn" data-team="0" data-inc="2">+2</button>
               <button class="bid-btn" data-team="0" data-inc="3">+3</button>
-              <button class="bid-btn" data-team="0" data-inc="5">+5</button>
             </div>
             <div class="bid-btns"><button class="bid-btn pass" data-team="0" data-pass="1">Pass</button></div>
             <div class="status-line" id="stat1"></div>
@@ -320,8 +322,8 @@
             <div class="bal">Coins: <b id="bal2">25</b></div>
             <div class="bid-btns">
               <button class="bid-btn" data-team="1" data-inc="1">+1</button>
+              <button class="bid-btn" data-team="1" data-inc="2">+2</button>
               <button class="bid-btn" data-team="1" data-inc="3">+3</button>
-              <button class="bid-btn" data-team="1" data-inc="5">+5</button>
             </div>
             <div class="bid-btns"><button class="bid-btn pass" data-team="1" data-pass="1">Pass</button></div>
             <div class="status-line" id="stat2"></div>
@@ -479,8 +481,7 @@ const POSITIONS = ["PG","SG","SF","PF","C"];
 const POS_NAMES = { PG:"Point Guard", SG:"Shooting Guard", SF:"Small Forward", PF:"Power Forward", C:"Center" };
 const START_COINS = 25;
 
-const HEADSTART = 5000;   // stopper-only exclusive window (ms)
-const OPEN_TIME = 6000;   // auction clock; every bid resets it back to this (ms)
+const TURN_TIME = 8000;   // each player's turn clock (ms); a bid hands the turn over and resets it
 const REEL_SPEED = 5;     // reel scroll speed while spinning (px/frame) — lower = slower
 
 /* ---------- Game state ---------- */
@@ -672,8 +673,8 @@ function startAuction(round, player, pos){
   const eligible = [ G.rosters[0][pos]===null, G.rosters[1][pos]===null ];
 
   A = { player, pos, stopper, other, eligible,
-        bid:0, leader:-1, passed:[false,false],
-        phase:"headstart", tEnd:0, settled:false, concluded:false,
+        bid:0, leader:-1, turn:stopper, passed:[false,false],
+        tEnd:0, settled:false, concluded:false,
         raf:null, claimTimer:null };
 
   // reset UI
@@ -683,7 +684,7 @@ function startAuction(round, player, pos){
   $("bal1").textContent = G.coins[0];
   $("bal2").textContent = G.coins[1];
   setStatus(0,"",""); setStatus(1,"","");
-  $("bidder1").classList.remove('lead'); $("bidder2").classList.remove('lead');
+  $("bidder1").classList.remove('lead','act'); $("bidder2").classList.remove('lead','act');
   $("bidAmt").innerHTML = `0<small> coins</small>`;
   $("bidLeader").textContent = "No bids yet";
   $("bidLeader").className = "leader";
@@ -703,35 +704,41 @@ function startAuction(round, player, pos){
   // Guard: neither eligible (shouldn't occur with a valid schedule).
   if(!eligible[0] && !eligible[1]){ concludeAuction(-1,0,`${player.n} went unclaimed.`); return; }
 
-  // Both eligible -> auction with a head start for the stopper.
-  setStatus(other, "locked", `Locked out for ${Math.ceil(HEADSTART/1000)}s…`);
-  setStatus(stopper, "", "Your head start — open the bidding!");
-  $("phaseNote").innerHTML = `<b style="color:${stopper===0?'var(--p1)':'var(--p2)'}">${G.names[stopper]}</b> stopped the reel &mdash; <b>5s head start</b> before ${G.names[other]} can bid.`;
-
-  A.tEnd = performance.now() + HEADSTART;
-  updateBidButtons();
+  // Both eligible -> strict alternating turns. The stopper acts first; each bid
+  // hands the turn to the opponent (their buttons go live) and resets the clock.
+  A.tEnd = performance.now() + TURN_TIME;
+  setTurnUI();
   A.raf = requestAnimationFrame(auctionTick);
+}
+
+// Reflect whose turn it is: only the active player's buttons work; the waiting
+// player just sees the state. Called after every bid / pass / handover.
+function setTurnUI(){
+  const t = A.turn, o = 1 - t;
+  $("bidder1").classList.toggle('lead', A.leader===0);
+  $("bidder2").classList.toggle('lead', A.leader===1);
+  $("bidder1").classList.toggle('act', !A.settled && A.turn===0);
+  $("bidder2").classList.toggle('act', !A.settled && A.turn===1);
+
+  const nm = c => `<b style="color:${c===0?'var(--p1)':'var(--p2)'}">${G.names[c]}</b>`;
+  $("phaseNote").innerHTML = A.leader < 0
+      ? `${nm(t)} to open the bidding — raise or pass.`
+      : `${nm(t)}'s turn — raise to top ${A.bid}, or pass and concede to ${nm(A.leader)}.`;
+
+  setStatus(t, "", A.leader < 0 ? "Your move — open it" : "Your move — raise or pass");
+  if(A.leader === o)      setStatus(o, "", "Leading at " + A.bid);
+  else if(A.passed[o])    setStatus(o, "passed", "Passed");
+  else                    setStatus(o, "locked", `Waiting for ${G.names[t]}…`);
+
+  updateBidButtons();
 }
 
 function auctionTick(){
   if(!A || A.settled) return;
-  const now = performance.now();
-  const remain = A.tEnd - now;
-
-  if(A.phase === "headstart"){
-    setTimer(Math.max(0, remain/HEADSTART), false);
-    if(remain <= 0){
-      A.phase = "open";
-      A.tEnd = now + OPEN_TIME;
-      if(A.eligible[A.other]) setStatus(A.other, "", "You can bid now!");
-      $("phaseNote").innerHTML = `Open bidding &mdash; highest bid when the clock hits zero wins.`;
-      updateBidButtons();
-    }
-  } else if(A.phase === "open"){
-    setTimer(Math.max(0, remain/OPEN_TIME), remain < 3000);
-    if(remain <= 0){ settleAuction(); return; }
-  }
-  A.raf = requestAnimationFrame(auctionTick);
+  const remain = A.tEnd - performance.now();
+  setTimer(Math.max(0, remain/TURN_TIME), remain < 2500);
+  if(remain <= 0) doPass(A.turn);          // time's up = the active player auto-passes
+  if(A && !A.settled) A.raf = requestAnimationFrame(auctionTick);
 }
 
 function setTimer(frac, warn){
@@ -752,55 +759,45 @@ document.querySelectorAll('.bid-btn').forEach(btn=>{
 
 function canBid(team){
   if(!A || A.settled) return false;
+  if(A.turn !== team) return false;     // only the player whose turn it is
   if(!A.eligible[team]) return false;
-  if(A.passed[team]) return false;
-  if(A.phase==="headstart" && team!==A.stopper) return false;
   return true;
 }
 
 function doBid(team, inc){
   if(!canBid(team)) return;
-  let target = A.bid + inc;
-  if(A.leader !== team && target <= A.bid) target = A.bid + 1;
+  const target = A.bid + inc;           // raise strictly above the current high
   if(target > G.coins[team]){
     setStatus(team, "", `Only ${G.coins[team]} coins!`);
     return;
   }
   A.bid = target;
   A.leader = team;
-  A.passed = [false,false]; // fresh bid re-opens the floor for both
-  if(A.phase==="open"){
-    A.tEnd = performance.now() + OPEN_TIME; // every bid resets the clock to full
-  }
+  A.turn = 1 - team;                    // hand the turn straight to the opponent
+  A.passed = [false,false];
+  A.tEnd = performance.now() + TURN_TIME; // reset the clock for the opponent
   $("bidAmt").innerHTML = `${A.bid}<small> coins</small>`;
   $("bidLeader").textContent = G.names[team] + " leads";
   $("bidLeader").className = "leader " + (team===0?"p1":"p2");
-  $("bidder1").classList.toggle('lead', team===0);
-  $("bidder2").classList.toggle('lead', team===1);
-  setStatus(team, "", "Leading at " + A.bid);
-  if(A.eligible[1-team] && A.phase==="open") setStatus(1-team, "", "Raise to take the lead");
-  updateBidButtons();
+  setTurnUI();
 }
 
 function doPass(team){
-  if(!A || A.settled || !A.eligible[team]) return;
-  if(A.phase==="headstart" && team!==A.stopper) return;
-  A.passed[team] = true;
-  setStatus(team, "passed", "Passed");
-  updateBidButtons();
-
+  if(!A || A.settled || A.turn !== team) return; // only the active player can pass
   if(A.leader >= 0){
-    // Settle if everyone other than the leader has passed.
-    const contenders = [0,1].filter(t=>A.eligible[t] && !A.passed[t] && t!==A.leader);
-    if(contenders.length===0){ settleAuction(); return; }
-  } else {
-    // No bids yet. If all eligible teams pass, stopper claims free.
-    const stillIn = [0,1].filter(t=>A.eligible[t] && !A.passed[t]);
-    if(stillIn.length===0){
-      const w = A.eligible[A.stopper] ? A.stopper : (A.eligible[0]?0:1);
-      settleAuction(w, 0);
-    }
+    settleAuction(A.leader, A.bid);      // concede — the last bidder wins
+    return;
   }
+  // No bids yet: record the pass and hand the opening turn to the opponent.
+  A.passed[team] = true;
+  const o = 1 - team;
+  if(A.passed[o]){                       // both passed with no bid → stopper claims free
+    settleAuction(A.stopper, 0);
+    return;
+  }
+  A.turn = o;
+  A.tEnd = performance.now() + TURN_TIME;
+  setTurnUI();
 }
 
 function settleAuction(forceWinner, forcePrice){
@@ -823,6 +820,7 @@ function concludeAuction(winner, price, note){
   if(A.claimTimer){ clearTimeout(A.claimTimer); A.claimTimer = null; }
   if(A.raf) cancelAnimationFrame(A.raf);
   disableAllBidButtons();
+  $("bidder1").classList.remove('act'); $("bidder2").classList.remove('act');
 
   const round = G.rounds[G.roundIdx];
   const p = round.player, pos = round.pos;
@@ -858,18 +856,13 @@ $("nextBtn").addEventListener('click', ()=>{
 function updateBidButtons(){
   document.querySelectorAll('.bid-btn').forEach(btn=>{
     const team = +btn.dataset.team;
+    const myTurn = canBid(team);              // true only on this team's turn
     if(btn.dataset.pass){
-      btn.disabled = !(A && !A.settled && A.eligible[team] && !A.passed[team] &&
-                       !(A.phase==="headstart" && team!==A.stopper));
+      btn.disabled = !myTurn;
       return;
     }
-    let ok = canBid(team);
-    if(ok){
-      const inc = +btn.dataset.inc;
-      let target = A.bid + inc;
-      if(A.leader !== team && target <= A.bid) target = A.bid + 1;
-      if(target > G.coins[team]) ok = false;
-    }
+    let ok = myTurn;
+    if(ok && A.bid + (+btn.dataset.inc) > G.coins[team]) ok = false; // can't exceed your coins
     btn.disabled = !ok;
   });
 }
