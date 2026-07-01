@@ -138,32 +138,24 @@
     font-size: clamp(16px,4vw,22px); font-weight: 800; color:#c7d0f5; white-space:nowrap;
   }
   .reel-item .era { font-size:13px; color: var(--dim); font-weight:600; }
-
-  /* ---------- Player reveal card ---------- */
-  .reveal { max-width: 520px; margin: 16px auto 0; text-align:center; }
-  .player-card {
-    position: relative; border-radius: 20px; padding: 22px 20px 20px;
-    background:
-      radial-gradient(400px 200px at 50% 0%, rgba(255,209,92,.14), transparent 70%),
-      linear-gradient(180deg,#151b30,#0e1226);
-    border:1px solid rgba(255,209,92,.30);
-    box-shadow: 0 24px 60px rgba(0,0,0,.45);
-    animation: pop .4s cubic-bezier(.2,1.3,.4,1);
+  .reel-item.selected {
+    color: var(--gold); font-weight:900;
+    background: linear-gradient(180deg, rgba(255,209,92,.20), rgba(255,209,92,.05));
+    box-shadow: inset 0 0 34px rgba(255,209,92,.18);
+    animation: lockin .45s cubic-bezier(.2,1.3,.4,1);
   }
-  @keyframes pop { from { transform: scale(.85); opacity:0;} to {transform:none; opacity:1;} }
-  .player-card .pos-tag {
-    position:absolute; top:14px; left:14px; font-size:13px; font-weight:900; letter-spacing:.08em;
-    color: var(--gold); background: rgba(255,209,92,.12); border:1px solid rgba(255,209,92,.4);
-    padding:4px 12px; border-radius:999px;
+  @keyframes lockin { 0%{transform:scale(.9);} 60%{transform:scale(1.05);} 100%{transform:none;} }
+  .reel-item.selected .era { color: rgba(255,209,92,.65); }
+  .reel-item .ovr {
+    font-size:12px; font-weight:900; color:#0a0d16; background: var(--gold);
+    padding:2px 9px; border-radius:999px; margin-left:8px;
   }
-  .player-card .rating {
-    position:absolute; top:14px; right:14px; font-size:13px; font-weight:900;
-    color: var(--good); background: rgba(71,230,160,.1); border:1px solid rgba(71,230,160,.35);
-    padding:4px 12px; border-radius:999px;
+  .reel-caption {
+    text-align:center; margin-top:12px; font-size:15px; color: var(--muted);
+    min-height:22px; opacity:0; transition: opacity .3s ease;
   }
-  .player-card .pname { font-size: clamp(24px,6vw,38px); font-weight:900; margin-top: 22px; line-height:1.05;}
-  .player-card .meta { color: var(--muted); margin-top:8px; font-size: 15px; }
-  .player-card .star { color: var(--gold); font-size: 13px; margin-top:10px; letter-spacing:.04em;}
+  .reel-caption.show { opacity:1; }
+  .reel-caption b { color: var(--ink); }
 
   /* ---------- Auction ---------- */
   .auction { max-width: 640px; margin: 16px auto 0; }
@@ -293,6 +285,7 @@
       <div class="reel-line"></div>
       <div class="reel-track" id="reelTrack"></div>
     </div>
+    <div class="reel-caption" id="reelCaption"></div>
 
     <!-- STOP phase -->
     <div id="stopPhase" class="center" style="margin-top:18px;">
@@ -300,18 +293,8 @@
       <button id="stopBtn" class="btn stop big" style="margin-top:10px;">STOP</button>
     </div>
 
-    <!-- Reveal + auction phase -->
+    <!-- Auction phase (the selected player is highlighted in the reel above) -->
     <div id="revealPhase" style="display:none;">
-      <div class="reveal">
-        <div class="player-card" id="playerCard">
-          <div class="pos-tag" id="pcPos">C</div>
-          <div class="rating" id="pcRating">OVR 90</div>
-          <div class="pname" id="pcName">—</div>
-          <div class="meta" id="pcMeta">—</div>
-          <div class="star" id="pcStar">★ —</div>
-        </div>
-      </div>
-
       <div class="auction" id="auction">
         <div class="bid-display">
           <div class="amt" id="bidAmt">0<small> coins</small></div>
@@ -497,8 +480,8 @@ const POS_NAMES = { PG:"Point Guard", SG:"Shooting Guard", SF:"Small Forward", P
 const START_COINS = 25;
 
 const HEADSTART = 5000;   // stopper-only exclusive window (ms)
-const OPEN_TIME = 8000;   // settle time once bidding opens to both (ms)
-const BID_EXTEND = 4000;  // a fresh bid keeps at least this much time on the clock (ms)
+const OPEN_TIME = 6000;   // auction clock; every bid resets it back to this (ms)
+const REEL_SPEED = 5;     // reel scroll speed while spinning (px/frame) — lower = slower
 
 /* ---------- Game state ---------- */
 let G = null;   // whole-game state
@@ -574,73 +557,105 @@ function beginRound(){
   startReel(round.pos);
 }
 
+const ITEM_H = 44, FRAME_H = 128;
+
+function randOf(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+function appendReelItem(p){
+  const el = document.createElement('div');
+  el.className = "reel-item";
+  el.innerHTML = `<span class="rn">${p.n}</span> <span class="era">${p.e}</span>`;
+  $("reelTrack").appendChild(el);
+  reel.items.push(p);
+  reel.nodes.push(el);
+}
+
 function startReel(pos){
   const track = $("reelTrack");
-  const pool = DB[pos];
-  // Build a long scrolling strip: several shuffled copies of the pool.
-  const items = [];
-  for(let k=0;k<8;k++){ items.push(...shuffle(pool.slice())); }
-  track.innerHTML = items.map(p=>`<div class="reel-item">${p.n} <span class="era">${p.e}</span></div>`).join('');
+  track.innerHTML = "";
+  track.style.transform = "translateY(0px)";
+  $("reelCaption").className = "reel-caption";
+  $("reelCaption").innerHTML = "";
 
-  const ITEM_H = 44;
-  reel = { pos, items, ITEM_H, total: items.length*ITEM_H, offset: 0, speed: 26, decel:false, raf:null };
+  reel = { pos, pool: DB[pos], items: [], nodes: [], offset: 0,
+           speed: REEL_SPEED, phase: "spin", raf: null, landedNode: null };
 
-  const step = ()=>{
-    if(!reel) return;
-    reel.offset += reel.speed;
-    if(reel.decel){
-      reel.speed *= 0.965;
-      if(reel.speed < 0.4){ reel.speed = 0; finishReel(); return; }
-    }
-    // wrap seamlessly through the middle of the strip
-    const wrapPoint = reel.total - reel.items.length*0.25*ITEM_H;
-    if(reel.offset > wrapPoint) reel.offset -= (reel.items.length>>1)*ITEM_H;
-    track.style.transform = `translateY(${-reel.offset}px)`;
-    reel.raf = requestAnimationFrame(step);
-  };
-  reel.raf = requestAnimationFrame(step);
+  // Seed some flavor names; more are appended on demand while spinning.
+  for(let k=0;k<20;k++) appendReelItem(randOf(reel.pool));
+  reel.raf = requestAnimationFrame(reelSpin);
+}
+
+function reelSpin(){
+  if(!reel || reel.phase !== "spin") return;
+  reel.offset += reel.speed;
+  // Keep a healthy buffer of items below the viewport (endless strip, no wrap).
+  while(reel.items.length*ITEM_H < reel.offset + FRAME_H + 24*ITEM_H){
+    appendReelItem(randOf(reel.pool));
+  }
+  $("reelTrack").style.transform = `translateY(${-reel.offset}px)`;
+  reel.raf = requestAnimationFrame(reelSpin);
 }
 
 $("stopBtn").addEventListener('click', ()=>{
-  if(!reel || reel.decel) return;
+  if(!reel || reel.phase !== "spin") return;
   $("stopBtn").disabled = true;
   $("stopBtn").textContent = "…";
-  $("stopNote").textContent = "The reel is slowing down…";
-  reel.decel = true;
+  $("stopNote").textContent = "Locking it in…";
+  cancelAnimationFrame(reel.raf);
+  reel.phase = "land";
+  landReel();
 });
 
-function finishReel(){
-  if(reel.raf) cancelAnimationFrame(reel.raf);
+// Roll a slow, satisfying distance and land exactly on this round's player.
+function landReel(){
+  const centerIdx = Math.round((reel.offset + FRAME_H/2 - ITEM_H/2) / ITEM_H);
+  const K = 12 + (Math.random()*7 | 0);          // items to roll before stopping
+  const targetIdx = centerIdx + K;
+  while(reel.items.length <= targetIdx + 4) appendReelItem(randOf(reel.pool));
+
+  // Drop the actual drafted player into the landing slot so the middle IS the pick.
+  const actual = G.rounds[G.roundIdx].player;
+  reel.items[targetIdx] = actual;
+  reel.landedNode = reel.nodes[targetIdx];
+  reel.landedNode.querySelector('.rn').textContent = actual.n;
+  reel.landedNode.querySelector('.era').textContent = actual.e;
+
   const track = $("reelTrack");
-  const frameH = 128;
-  // Which item sits on the center line right now?
-  const centerY = reel.offset + frameH/2;
-  let idx = Math.round((centerY - reel.ITEM_H/2) / reel.ITEM_H);
-  idx = ((idx % reel.items.length) + reel.items.length) % reel.items.length;
-  // Snap it perfectly centered.
-  const snapOffset = idx*reel.ITEM_H + reel.ITEM_H/2 - frameH/2;
-  reel.offset = snapOffset;
-  track.style.transition = "transform .25s ease-out";
-  track.style.transform = `translateY(${-reel.offset}px)`;
-  setTimeout(()=>{ track.style.transition=""; revealPlayer(); }, 280);
+  const startOffset = reel.offset;
+  const dist = (targetIdx*ITEM_H + ITEM_H/2 - FRAME_H/2) - startOffset;
+  const dur = 2300, t0 = performance.now();
+  const animate = ()=>{
+    const t = Math.min(1, (performance.now()-t0)/dur);
+    const e = 1 - Math.pow(1-t, 3);              // ease-out cubic
+    reel.offset = startOffset + dist*e;
+    track.style.transform = `translateY(${-reel.offset}px)`;
+    if(t < 1){ reel.raf = requestAnimationFrame(animate); }
+    else { reel.phase = "done"; onReelLanded(); }
+  };
+  reel.raf = requestAnimationFrame(animate);
 }
 
 /* ============================================================
    REVEAL + AUCTION
    ============================================================ */
-function revealPlayer(){
+function onReelLanded(){
   const round = G.rounds[G.roundIdx];
   const p = round.player, pos = round.pos;
 
+  // Mark the centered item as the selected player.
+  reel.landedNode.classList.add('selected');
+  if(!reel.landedNode.querySelector('.ovr')){
+    const b = document.createElement('span');
+    b.className = "ovr";
+    b.textContent = "OVR " + p.r;
+    reel.landedNode.appendChild(b);
+  }
+  const cap = $("reelCaption");
+  cap.innerHTML = `<b>${p.n}</b> — ${starWord(p.r)} · ${POS_NAMES[pos]}`;
+  cap.classList.add('show');
+
   $("stopPhase").style.display = "none";
   $("revealPhase").style.display = "";
-
-  $("pcPos").textContent = pos;
-  $("pcRating").textContent = "OVR " + p.r;
-  $("pcName").textContent = p.n;
-  $("pcMeta").textContent = POS_NAMES[pos] + " · Star era " + p.e;
-  $("pcStar").textContent = "★ " + starWord(p.r) + " — a coveted prize";
-
   startAuction(round, p, pos);
 }
 
@@ -755,8 +770,7 @@ function doBid(team, inc){
   A.leader = team;
   A.passed = [false,false]; // fresh bid re-opens the floor for both
   if(A.phase==="open"){
-    const now = performance.now();
-    if(A.tEnd - now < BID_EXTEND) A.tEnd = now + BID_EXTEND;
+    A.tEnd = performance.now() + OPEN_TIME; // every bid resets the clock to full
   }
   $("bidAmt").innerHTML = `${A.bid}<small> coins</small>`;
   $("bidLeader").textContent = G.names[team] + " leads";
