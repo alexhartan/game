@@ -1,0 +1,93 @@
+name: Deploy to GitHub Pages
+
+# The repo has a single GitHub Pages site but hosts several independent games,
+# one per branch. This workflow assembles a combined site that publishes each
+# game to its own sub-path, so they stay independent and never overwrite each
+# other:
+#   /               -> landing page linking to every game
+#   /nba-draft/     -> Hardwood Auction (this branch's index.html)
+#   /escape-void/   -> Escape the Void (pulled from its branch at build time)
+on:
+  push:
+    branches:
+      - main
+      - claude/pvp-nba-draft-game-n5rb0e
+  workflow_dispatch:
+
+# Permissions required for the official GitHub Pages deployment actions.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent Pages deployment; newer pushes supersede in-flight ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+# Branch that holds the Escape the Void game, folded in as a sub-path so it
+# stays live alongside this game.
+env:
+  VOID_BRANCH: claude/escape-void-game-2oa4v0
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout (full history for cross-branch fetch)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Assemble combined site
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site/nba-draft _site/escape-void
+
+          # This branch's game.
+          cp index.html _site/nba-draft/index.html
+
+          # The void game, taken from its own branch (independent, untouched).
+          if git fetch --depth=1 origin "$VOID_BRANCH" 2>/dev/null && \
+             git show "origin/${VOID_BRANCH}:index.html" > _site/escape-void/index.html 2>/dev/null; then
+            echo "Included Escape the Void from $VOID_BRANCH"
+          else
+            echo "Escape the Void branch not found; skipping that sub-path"
+            rmdir _site/escape-void
+          fi
+
+          # Simple landing page linking to whichever games got built.
+          {
+            echo '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">'
+            echo '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+            echo '<title>Games</title><style>'
+            echo 'body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;background:#0a0d16;color:#eef2ff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}'
+            echo 'h1{font-weight:900;letter-spacing:.04em}'
+            echo 'a{display:block;min-width:260px;text-align:center;padding:18px 28px;border-radius:16px;text-decoration:none;color:#fff;font-weight:800;font-size:18px;border:1px solid rgba(120,140,220,.3)}'
+            echo '.nba{background:linear-gradient(180deg,#ff8a4d,#d8531f)}.void{background:linear-gradient(180deg,#5568ff,#2a37c8)}'
+            echo 'small{color:#9aa6d6;font-weight:500;display:block;margin-top:4px;font-size:13px}'
+            echo '</style></head><body><h1>Pick a game</h1>'
+            echo '<a class="nba" href="./nba-draft/">🏀 Hardwood Auction<small>1v1 PvP NBA draft</small></a>'
+            if [ -f _site/escape-void/index.html ]; then
+              echo '<a class="void" href="./escape-void/">🌀 Escape the Void<small>arcade survival</small></a>'
+            fi
+            echo '</body></html>'
+          } > _site/index.html
+
+          echo "Built site:"; find _site -type f | sort
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
