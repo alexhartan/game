@@ -255,9 +255,10 @@
       <ul>
         <li>Each of you starts with <b style="color:var(--gold)">25 coins</b> and an empty roster: <b>PG · SG · SF · PF · C</b>.</li>
         <li>Every round the reel cycles well-known All-Stars for one position. The designated player hits <b>STOP</b> — it slows and lands on a name.</li>
-        <li>An <b>auction</b> opens. The player who stopped it gets a <b>5-second head start</b> to bid before their rival can jump in.</li>
-        <li>Tap to raise. Highest bid when the clock runs out wins the player, pays the coins, and locks them into that roster slot.</li>
-        <li>Exactly <b>2 of each position</b> appear across <b>10 rounds</b>, so both rosters fill up. You can't bid on a slot you've already filled.</li>
+        <li>An <b>auction</b> opens. Bidding <b>alternates</b>: the stopper opens, then each bid hands the turn straight to the rival and resets the clock. Let the clock run out on your turn and you pass.</li>
+        <li>Pass while a bid stands and you concede — the last bidder wins, pays the coins, and locks the player into that slot.</li>
+        <li><b>Poach & upgrade:</b> already own that position? You can still bid — win and the new player joins you while your old one slides to your rival (a free consolation). So there are no free superstars: every player is worth fighting for.</li>
+        <li>Exactly <b>2 of each position</b> appear across <b>10 rounds</b>, so both rosters fill 1 of each.</li>
         <li>At the end, the roster with the highest <b>total rating</b> wins. Spend wisely.</li>
       </ul>
     </div>
@@ -670,9 +671,12 @@ function starWord(r){
 
 function startAuction(round, player, pos){
   const stopper = G.stopper, other = 1 - stopper;
-  const eligible = [ G.rosters[0][pos]===null, G.rosters[1][pos]===null ];
+  // owns[t] = the player team t already holds at this slot (or null). A team that
+  // owns the slot can still bid — to POACH: win and their old player slides across.
+  const owns = [ G.rosters[0][pos], G.rosters[1][pos] ];
+  const filled = [ owns[0]!==null, owns[1]!==null ];
 
-  A = { player, pos, stopper, other, eligible,
+  A = { player, pos, stopper, other, owns, filled, poached:null,
         bid:0, leader:-1, turn:stopper, passed:[false,false],
         tEnd:0, settled:false, concluded:false,
         raf:null, claimTimer:null };
@@ -690,22 +694,9 @@ function startAuction(round, player, pos){
   $("bidLeader").className = "leader";
   setTimer(1,false);
 
-  // Uncontested case: only one team still needs this position.
-  if(eligible[0] !== eligible[1]){
-    const w = eligible[0] ? 0 : 1;
-    setStatus(1-w, "filled", `${A.pos} already filled`);
-    $("phaseNote").innerHTML = `<b style="color:${w===0?'var(--p1)':'var(--p2)'}">${G.names[w]}</b> is the only team still needing a ${pos} — claimed uncontested.`;
-    $("bidLeader").textContent = "Uncontested claim";
-    $("bidLeader").className = "leader " + (w===0?"p1":"p2");
-    disableAllBidButtons(); // nothing to bid on — auto-claimed
-    A.claimTimer = setTimeout(()=>concludeAuction(w, 0, `${G.names[w]} fills ${pos} with ${player.n} for free.`), 1500);
-    return;
-  }
-  // Guard: neither eligible (shouldn't occur with a valid schedule).
-  if(!eligible[0] && !eligible[1]){ concludeAuction(-1,0,`${player.n} went unclaimed.`); return; }
-
-  // Both eligible -> strict alternating turns. The stopper acts first; each bid
-  // hands the turn to the opponent (their buttons go live) and resets the clock.
+  // Both teams always bid. The stopper opens; each bid hands the turn to the
+  // opponent and resets the clock. A team that already owns the slot bids to
+  // poach — win and the new player joins them, their old one slides to the rival.
   A.tEnd = performance.now() + TURN_TIME;
   setTurnUI();
   A.raf = requestAnimationFrame(auctionTick);
@@ -721,11 +712,16 @@ function setTurnUI(){
   $("bidder2").classList.toggle('act', !A.settled && A.turn===1);
 
   const nm = c => `<b style="color:${c===0?'var(--p1)':'var(--p2)'}">${G.names[c]}</b>`;
-  $("phaseNote").innerHTML = A.leader < 0
-      ? `${nm(t)} to open the bidding — raise or pass.`
-      : `${nm(t)}'s turn — raise to top ${A.bid}, or pass and concede to ${nm(A.leader)}.`;
-
-  setStatus(t, "", A.leader < 0 ? "Your move — open it" : "Your move — raise or pass");
+  const poaching = A.filled[t]; // active team already owns this slot → bidding = upgrade
+  if(poaching){
+    $("phaseNote").innerHTML = `${nm(t)} already holds ${A.pos} (${A.owns[t].name}) — bid to <b style="color:var(--gold)">poach ${A.player.n}</b> and pass ${A.owns[t].name} to ${nm(o)}, or pass.`;
+    setStatus(t, "", `Win to upgrade → ${A.owns[t].name} goes to ${G.names[o]}`);
+  } else {
+    $("phaseNote").innerHTML = A.leader < 0
+        ? `${nm(t)} to open the bidding — raise or pass.`
+        : `${nm(t)}'s turn — raise to top ${A.bid}, or pass and concede to ${nm(A.leader)}.`;
+    setStatus(t, "", A.leader < 0 ? "Your move — open it" : "Your move — raise or pass");
+  }
   if(A.leader === o)      setStatus(o, "", "Leading at " + A.bid);
   else if(A.passed[o])    setStatus(o, "passed", "Passed");
   else                    setStatus(o, "locked", `Waiting for ${G.names[t]}…`);
@@ -759,8 +755,7 @@ document.querySelectorAll('.bid-btn').forEach(btn=>{
 
 function canBid(team){
   if(!A || A.settled) return false;
-  if(A.turn !== team) return false;     // only the player whose turn it is
-  if(!A.eligible[team]) return false;
+  if(A.turn !== team) return false;     // only the player whose turn it is (both are eligible)
   return true;
 }
 
@@ -791,13 +786,22 @@ function doPass(team){
   // No bids yet: record the pass and hand the opening turn to the opponent.
   A.passed[team] = true;
   const o = 1 - team;
-  if(A.passed[o]){                       // both passed with no bid → stopper claims free
-    settleAuction(A.stopper, 0);
+  if(A.passed[o]){
+    // Both passed with no bid → the team that still NEEDS the slot claims it free.
+    // (A team that already owns it can never take a player for 0 — no free poach.)
+    settleAuction(neediestTeam(), 0);
     return;
   }
   A.turn = o;
   A.tEnd = performance.now() + TURN_TIME;
   setTurnUI();
+}
+
+// Team to award an un-bid player to: the one that still needs the slot; if both
+// need it (first reveal of a position), the stopper.
+function neediestTeam(){
+  if(!A.filled[0] && !A.filled[1]) return A.stopper;
+  return A.filled[0] ? 1 : 0;
 }
 
 function settleAuction(forceWinner, forcePrice){
@@ -809,7 +813,7 @@ function settleAuction(forceWinner, forcePrice){
   let winner, price;
   if(forceWinner!==undefined){ winner = forceWinner; price = forcePrice; }
   else if(A.leader>=0){ winner = A.leader; price = A.bid; }
-  else { winner = A.eligible[A.stopper] ? A.stopper : (A.eligible[0]?0:1); price = 0; }
+  else { winner = neediestTeam(); price = 0; }
   concludeAuction(winner, price, null);
 }
 
@@ -826,16 +830,26 @@ function concludeAuction(winner, price, note){
   const p = round.player, pos = round.pos;
 
   if(winner>=0){
+    // Poach: if the winner already holds this slot, their old player slides to
+    // the other team (free consolation) before the new one takes the slot.
+    if(G.rosters[winner][pos]){
+      const rival = 1 - winner;
+      const old = G.rosters[winner][pos];
+      G.rosters[rival][pos] = { ...old, cost:0 };
+      A.poached = { to: rival, oldName: old.name };
+    }
     G.coins[winner] -= price;
     G.rosters[winner][pos] = { name:p.n, rating:p.r, cost:price, era:p.e };
   }
 
   renderScoreboard();
-  renderRosters('rostersDraft', winner, pos);
+  renderRosters('rostersDraft', A.poached ? -2 : winner, pos);
 
-  $("resultNote").innerHTML = winner>=0
-      ? `<span style="color:${winner===0?'var(--p1)':'var(--p2)'}">${G.names[winner]}</span> lands <b>${p.n}</b> for <b style="color:var(--gold)">${price}</b> coin${price===1?'':'s'}`
-      : (note || `${p.n} went unclaimed.`);
+  const tint = t => `<span style="color:${t===0?'var(--p1)':'var(--p2)'}">${G.names[t]}</span>`;
+  $("resultNote").innerHTML = winner<0
+      ? (note || `${p.n} went unclaimed.`)
+      : `${tint(winner)} lands <b>${p.n}</b> for <b style="color:var(--gold)">${price}</b> coin${price===1?'':'s'}`
+        + (A.poached ? ` — upgrade! <b>${A.poached.oldName}</b> slides to ${tint(A.poached.to)}` : ``);
   $("phaseNote").textContent = "";
   $("bidLeader").textContent = winner>=0 ? G.names[winner]+" wins" : "Unclaimed";
   $("nextWrap").style.display = "";
@@ -894,7 +908,7 @@ function renderRosters(containerId, hotTeam, hotPos){
     div.className = "roster " + (t===0?"p1":"p2");
     const rows = POSITIONS.map(pos=>{
       const slot = G.rosters[t][pos];
-      const hot = (t===hotTeam && pos===hotPos) ? " hot" : "";
+      const hot = (pos===hotPos && (t===hotTeam || hotTeam===-2)) ? " hot" : ""; // -2 = both teams (poach)
       if(slot){
         return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
       }
