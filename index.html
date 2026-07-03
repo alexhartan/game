@@ -261,9 +261,10 @@
         <li>Every round the reel cycles well-known All-Stars for one position. The designated player hits <b>STOP</b> — it slows and lands on a name.</li>
         <li>An <b>auction</b> opens. Bidding <b>alternates</b>: the stopper opens, then each bid hands the turn straight to the rival and resets the clock. Let the clock run out on your turn and you pass.</li>
         <li>Pass while a bid stands and you concede — the last bidder wins, pays the coins, and locks the player into that slot.</li>
-        <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at. Keep the star, or sell it to drain their coins.</li>
-        <li>Exactly <b>2 of each position</b> appear across <b>10 rounds</b>, so both rosters fill 1 of each.</li>
-        <li>At the end, the roster with the highest <b>total rating</b> wins. Spend wisely.</li>
+        <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the same slot.</li>
+        <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at — even if it forces them into the red. Keep the star, or sell it to drain their coins.</li>
+        <li>Both rosters fill 1 of each position across <b>10 slots</b>.</li>
+        <li><b>Final score = roster skill + leftover coins ×3.</b> A 5-coin reserve adds 15; a negative balance subtracts. Highest score wins — so spend hard, but not into a hole.</li>
       </ul>
     </div>
 
@@ -500,30 +501,36 @@ let reel = null; // reel animation state
 let A = null;    // current auction state
 
 function newGame(name1, name2){
-  // Build the round schedule: 2 distinct players of each position, order shuffled.
-  const rounds = [];
-  POSITIONS.forEach(pos => {
-    sampleTwo(DB[pos]).forEach(p => rounds.push({ pos, player: p }));
-  });
-  shuffle(rounds);
+  // 10 tickets = 2 slots per position, order shuffled. Each ticket is one net
+  // roster fill; a ticket's player is drawn fresh at reveal time so a no-bid
+  // player can be discarded and re-drawn without disturbing the schedule.
+  const tickets = [];
+  POSITIONS.forEach(pos => { tickets.push(pos, pos); });
+  shuffle(tickets);
+
+  // A draw deck per position (shuffled); players are consumed as they appear,
+  // so nobody is ever drafted twice and discards keep pulling new faces.
+  const decks = {};
+  POSITIONS.forEach(pos => decks[pos] = shuffle(DB[pos].slice()));
 
   return {
     names: [ name1 || "Player 1", name2 || "Player 2" ],
     coins: [ START_COINS, START_COINS ],
     rosters: [ blankRoster(), blankRoster() ],
-    rounds,
+    tickets, decks,
     roundIdx: 0,
-    stopper: 0, // whose turn to hit STOP (alternates each round)
+    current: null,      // the player currently on the reel / up for auction
+    discards: 0,        // no-bid discards on the current ticket (safety bound)
+    stopper: 0,         // whose turn to hit STOP (alternates each ticket)
   };
 }
-function blankRoster(){ const r={}; POSITIONS.forEach(p=>r[p]=null); return r; }
 
-function sampleTwo(arr){
-  const i = (Math.random()*arr.length)|0;
-  let j = (Math.random()*arr.length)|0;
-  while(j===i) j = (Math.random()*arr.length)|0;
-  return [arr[i], arr[j]];
+function drawPlayer(pos){
+  const deck = G.decks[pos];
+  if(!deck.length) deck.push(...shuffle(DB[pos].slice())); // safety refill (rarely needed)
+  return deck.shift();
 }
+function blankRoster(){ const r={}; POSITIONS.forEach(p=>r[p]=null); return r; }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=(Math.random()*(i+1))|0; [a[i],a[j]]=[a[j],a[i]]; } return a; }
 
 /* ---------- DOM helpers ---------- */
@@ -549,23 +556,25 @@ $("startBtn").addEventListener('click', ()=>{
    ROUND — reel + stop
    ============================================================ */
 function beginRound(){
-  const round = G.rounds[G.roundIdx];
-  $("roundPill").textContent = `Round ${G.roundIdx+1} / ${G.rounds.length}`;
-  $("posBanner").textContent = round.pos + " — " + POS_NAMES[round.pos];
+  const pos = G.tickets[G.roundIdx];
+  G.current = drawPlayer(pos);           // fresh player for this reveal
+  $("roundPill").textContent = `Round ${G.roundIdx+1} / ${G.tickets.length}`;
+  $("posBanner").textContent = pos + " — " + POS_NAMES[pos];
   $("stopPhase").style.display = "";
   $("revealPhase").style.display = "none";
   $("nextWrap").style.display = "none";
+  $("poachWrap").style.display = "none";
   $("auction").style.display = "";
 
   renderScoreboard();
   $("chip1").classList.toggle('turn', G.stopper===0);
   $("chip2").classList.toggle('turn', G.stopper===1);
-  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[round.pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> hits STOP`;
+  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> hits STOP`;
 
   const btn = $("stopBtn");
   btn.disabled = false;
   btn.textContent = "STOP";
-  startReel(round.pos);
+  startReel(pos);
 }
 
 const ITEM_H = 44, FRAME_H = 128;
@@ -625,7 +634,7 @@ function landReel(){
   while(reel.items.length <= targetIdx + 4) appendReelItem(randOf(reel.pool));
 
   // Drop the actual drafted player into the landing slot so the middle IS the pick.
-  const actual = G.rounds[G.roundIdx].player;
+  const actual = G.current;
   reel.items[targetIdx] = actual;
   reel.landedNode = reel.nodes[targetIdx];
   reel.landedNode.querySelector('.rn').textContent = actual.n;
@@ -650,8 +659,7 @@ function landReel(){
    REVEAL + AUCTION
    ============================================================ */
 function onReelLanded(){
-  const round = G.rounds[G.roundIdx];
-  const p = round.player, pos = round.pos;
+  const p = G.current, pos = G.tickets[G.roundIdx];
 
   // Mark the centered item as the selected player.
   reel.landedNode.classList.add('selected');
@@ -667,7 +675,7 @@ function onReelLanded(){
 
   $("stopPhase").style.display = "none";
   $("revealPhase").style.display = "";
-  startAuction(round, p, pos);
+  startAuction(p, pos);
 }
 
 function starWord(r){
@@ -678,7 +686,7 @@ function starWord(r){
   return "All-Star";
 }
 
-function startAuction(round, player, pos){
+function startAuction(player, pos){
   const stopper = G.stopper, other = 1 - stopper;
   // owns[t] = the player team t already holds at this slot (or null). A team that
   // owns the slot can still bid — to POACH: win and their old player slides across.
@@ -797,9 +805,8 @@ function doPass(team){
   A.passed[team] = true;
   const o = 1 - team;
   if(A.passed[o]){
-    // Both passed with no bid → the team that still NEEDS the slot claims it free.
-    // (A team that already owns it can never take a player for 0 — no free poach.)
-    settleAuction(neediestTeam(), 0);
+    // Nobody wanted this player → discard and draft a new one for this slot.
+    discardAndRedraft();
     return;
   }
   A.turn = o;
@@ -807,11 +814,37 @@ function doPass(team){
   setTurnUI();
 }
 
-// Team to award an un-bid player to: the one that still needs the slot; if both
-// need it (first reveal of a position), the stopper.
+// Team that still NEEDS the slot; if both need it (first reveal), the stopper.
 function neediestTeam(){
   if(!A.filled[0] && !A.filled[1]) return A.stopper;
   return A.filled[0] ? 1 : 0;
+}
+
+const MAX_DISCARDS = 6; // safety: after this many no-bid discards on one slot,
+                        // award the needy team free so the game always progresses.
+
+// Nobody bid: bin the player and spin a fresh one for the same slot.
+function discardAndRedraft(){
+  if(!A || A.settled) return;
+  A.settled = true;
+  if(A.raf) cancelAnimationFrame(A.raf);
+  disableAllBidButtons();
+  $("bidder1").classList.remove('act'); $("bidder2").classList.remove('act');
+  setStatus(0,"",""); setStatus(1,"","");
+  setTimer(0,false);
+
+  G.discards++;
+  const discarded = A.player, pos = A.pos;
+
+  if(G.discards > MAX_DISCARDS){                 // rare safety valve
+    concludeAuction(neediestTeam(), 0, null);
+    return;
+  }
+  $("phaseNote").innerHTML =
+      `No bids — <b>${discarded.n}</b> goes undrafted. Spinning a new ${pos}…`;
+  $("bidLeader").textContent = "Discarded";
+  A = null;                                       // this auction is over
+  setTimeout(()=>{ if(G) beginRound(); }, 1700);  // same ticket, brand-new player
 }
 
 function settleAuction(forceWinner, forcePrice){
@@ -836,8 +869,7 @@ function concludeAuction(winner, price, note){
   disableAllBidButtons();
   $("bidder1").classList.remove('act'); $("bidder2").classList.remove('act');
 
-  const round = G.rounds[G.roundIdx];
-  const p = round.player, pos = round.pos;
+  const p = A.player, pos = A.pos;
   $("phaseNote").textContent = "";
 
   // Poach: winner already holds this slot → they now have TWO players here and
@@ -868,12 +900,13 @@ function concludeAuction(winner, price, note){
 
 function finishRoundUI(){
   $("nextWrap").style.display = "";
-  const last = G.roundIdx >= G.rounds.length - 1;
+  const last = G.roundIdx >= G.tickets.length - 1;
   $("nextBtn").textContent = last ? "See Final Result →" : "Next Round →";
 }
 
 // The poach winner holds two players at this slot. They keep one; the other is
-// sold to the rival, who pays that player's original bid price (capped at coins).
+// sold to the rival, who must pay that player's original bid price — even into
+// the red (unspent coins are scored ×3, so debt is a real cost).
 function offerPoachChoice(winner, pos, oldP, newP){
   const rival = 1 - winner;
   setStatus(0,"",""); setStatus(1,"","");   // auction's over — clear stale turn prompts
@@ -882,11 +915,10 @@ function offerPoachChoice(winner, pos, oldP, newP){
       `${tint(winner)} poached <b>${newP.name}</b> for <b style="color:var(--gold)">${newP.cost}</b>! `
     + `Keep one at ${pos} — the other is sold to ${tint(rival)} for the price it was won at.`;
 
-  const price = pl => Math.min(pl.cost, G.coins[rival]); // what the rival can actually pay
   const mk = (keep, give) =>
       `<button class="btn poach-choice" data-keepnew="${keep===newP?1:0}">`
     + `Keep ${keep.name} <span style="opacity:.75">(OVR ${keep.rating})</span>`
-    + `<small>sell ${give.name} to ${G.names[rival]} for ${price(give)}c</small></button>`;
+    + `<small>sell ${give.name} to ${G.names[rival]} for ${give.cost}c</small></button>`;
   $("poachBtns").innerHTML = mk(newP, oldP) + mk(oldP, newP);
   $("poachBtns").querySelectorAll('.poach-choice').forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -899,7 +931,7 @@ function offerPoachChoice(winner, pos, oldP, newP){
 
 function finalizePoach(winner, pos, kept, given){
   const rival = 1 - winner;
-  const pay = Math.min(given.cost, G.coins[rival]);   // rival reimburses the player's price
+  const pay = given.cost;              // full price — the rival can be forced into debt
   G.coins[rival]  -= pay;
   G.coins[winner] += pay;
   G.rosters[winner][pos] = kept;
@@ -917,8 +949,9 @@ function finalizePoach(winner, pos, kept, given){
 }
 
 $("nextBtn").addEventListener('click', ()=>{
-  if(G.roundIdx >= G.rounds.length - 1){ endGame(); return; }
+  if(G.roundIdx >= G.tickets.length - 1){ endGame(); return; }
   G.roundIdx++;
+  G.discards = 0;            // fresh discard budget for the new slot
   G.stopper = 1 - G.stopper; // alternate the stopper
   A = null; reel = null;
   beginRound();
@@ -955,13 +988,15 @@ function renderScoreboard(){
   $("chip2").querySelector('.coins').textContent = G.coins[1];
 }
 
+const COIN_MULT = 3;   // every leftover coin is worth this much at the final buzzer
 function rosterTotal(t){ return POSITIONS.reduce((s,pos)=> s + (G.rosters[t][pos]?G.rosters[t][pos].rating:0), 0); }
+function scoreOf(t){ return rosterTotal(t) + G.coins[t]*COIN_MULT; }   // skill + coin reserve ×3
 
 function renderRosters(containerId, hotTeam, hotPos){
   const c = $(containerId);
   c.innerHTML = "";
   for(let t=0;t<2;t++){
-    const tot = rosterTotal(t);
+    const tot = rosterTotal(t), coins = G.coins[t], score = scoreOf(t);
     const div = document.createElement('div');
     div.className = "roster " + (t===0?"p1":"p2");
     const rows = POSITIONS.map(pos=>{
@@ -972,7 +1007,7 @@ function renderRosters(containerId, hotTeam, hotPos){
       }
       return `<div class="slot empty"><span class="pp">${pos}</span><span class="nn">— empty —</span></div>`;
     }).join('');
-    div.innerHTML = `<h3><span class="nm">${G.names[t]}</span><span class="tot">Σ ${tot} · ${G.coins[t]}c left</span></h3>${rows}`;
+    div.innerHTML = `<h3><span class="nm">${G.names[t]}</span><span class="tot">Σ ${score} · ${tot} skill · ${coins}c</span></h3>${rows}`;
     c.appendChild(div);
   }
 }
@@ -982,20 +1017,26 @@ function renderRosters(containerId, hotTeam, hotPos){
    ============================================================ */
 function endGame(){
   showScreen('screen-results');
-  const totals = [rosterTotal(0), rosterTotal(1)];
-  let winner = totals[0]>totals[1] ? 0 : (totals[1]>totals[0] ? 1 : -1);
+  const skill = [rosterTotal(0), rosterTotal(1)];
+  const scores = [scoreOf(0), scoreOf(1)];
+  const winner = scores[0]>scores[1] ? 0 : (scores[1]>scores[0] ? 1 : -1);
+  // e.g. "+15" for 5 coins, "−9" for -3 coins (each coin ×3)
+  const cp = t => (G.coins[t]>=0?'+':'−') + Math.abs(G.coins[t])*COIN_MULT;
+  const line = t => `${G.names[t]}: <b>${scores[t]}</b> = ${skill[t]} skill ${cp(t)} (${G.coins[t]}c×${COIN_MULT})`;
 
   const wn = $("winnerName");
   if(winner===-1){
     wn.textContent = "It's a Tie!";
     wn.className = "winner-name tie";
-    $("resultSub").textContent = `Both rosters rated ${totals[0]}. Split the trophy.`;
+    $("resultSub").innerHTML = `Both finish on <b>${scores[0]}</b>. Split the trophy.<br>` +
+      `<span style="font-size:.88em;color:var(--dim)">${line(0)} &nbsp;•&nbsp; ${line(1)}</span>`;
   } else {
     wn.textContent = G.names[winner] + " wins!";
     wn.className = "winner-name " + (winner===0?"p1":"p2");
-    const margin = Math.abs(totals[0]-totals[1]);
-    const spent = START_COINS - G.coins[winner];
-    $("resultSub").innerHTML = `Roster rating <b style="color:var(--gold)">${totals[winner]}</b> vs ${totals[1-winner]} — a ${margin}-point edge, built for ${spent} of ${START_COINS} coins.`;
+    const margin = Math.abs(scores[0]-scores[1]);
+    $("resultSub").innerHTML =
+      `Final <b style="color:var(--gold)">${scores[winner]}</b> vs ${scores[1-winner]} — a ${margin}-point edge.<br>` +
+      `<span style="font-size:.88em;color:var(--dim)">${line(winner)} &nbsp;•&nbsp; ${line(1-winner)}</span>`;
   }
   renderRosters('rostersFinal', -1, null);
 }
