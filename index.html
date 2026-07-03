@@ -180,6 +180,10 @@
   .bidder.lead.p2 { box-shadow: 0 0 26px rgba(60,166,255,.5); border-color: var(--p2);}
   .bidder.act { border-color: var(--gold); box-shadow: 0 0 24px rgba(255,209,92,.35); }
   .bidder:not(.act) .bid-btn { opacity: .5; }
+  #poachBtns { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+  .poach-choice { flex:1 1 200px; max-width:280px; flex-direction:column; line-height:1.3;
+    background: linear-gradient(180deg,#ffb347,#e07b1f); }
+  .poach-choice small { display:block; font-weight:600; opacity:.85; font-size:12px; margin-top:4px; }
   .bidder .who { font-weight:900; font-size:15px; }
   .bidder.p1 .who { color: var(--p1);} .bidder.p2 .who { color: var(--p2);}
   .bidder .bal { font-size:12px; color: var(--muted); margin-top:2px; }
@@ -257,7 +261,7 @@
         <li>Every round the reel cycles well-known All-Stars for one position. The designated player hits <b>STOP</b> — it slows and lands on a name.</li>
         <li>An <b>auction</b> opens. Bidding <b>alternates</b>: the stopper opens, then each bid hands the turn straight to the rival and resets the clock. Let the clock run out on your turn and you pass.</li>
         <li>Pass while a bid stands and you concede — the last bidder wins, pays the coins, and locks the player into that slot.</li>
-        <li><b>Poach & upgrade:</b> already own that position? You can still bid — win and the new player joins you while your old one slides to your rival (a free consolation). So there are no free superstars: every player is worth fighting for.</li>
+        <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at. Keep the star, or sell it to drain their coins.</li>
         <li>Exactly <b>2 of each position</b> appear across <b>10 rounds</b>, so both rosters fill 1 of each.</li>
         <li>At the end, the roster with the highest <b>total rating</b> wins. Spend wisely.</li>
       </ul>
@@ -330,6 +334,11 @@
             <div class="status-line" id="stat2"></div>
           </div>
         </div>
+      </div>
+
+      <div class="center" id="poachWrap" style="display:none; margin-top:16px;">
+        <div class="phase-note" id="poachPrompt" style="font-size:15px; font-weight:800;"></div>
+        <div id="poachBtns"></div>
       </div>
 
       <div class="center" id="nextWrap" style="display:none; margin-top:16px;">
@@ -683,6 +692,7 @@ function startAuction(round, player, pos){
 
   // reset UI
   $("nextWrap").style.display = "none";
+  $("poachWrap").style.display = "none";
   $("bw1").textContent = G.names[0];
   $("bw2").textContent = G.names[1];
   $("bal1").textContent = G.coins[0];
@@ -828,34 +838,82 @@ function concludeAuction(winner, price, note){
 
   const round = G.rounds[G.roundIdx];
   const p = round.player, pos = round.pos;
+  $("phaseNote").textContent = "";
 
+  // Poach: winner already holds this slot → they now have TWO players here and
+  // must keep one. The other is SOLD to the rival for its original bid price.
+  if(winner>=0 && G.rosters[winner][pos]){
+    G.coins[winner] -= price;                       // pay the bank for the poached player
+    const oldP = G.rosters[winner][pos];            // carries its earlier price
+    const newP = { name:p.n, rating:p.r, cost:price, era:p.e };
+    $("bidLeader").textContent = G.names[winner] + " poaches!";
+    offerPoachChoice(winner, pos, oldP, newP);
+    return;                                          // finished once the winner chooses
+  }
+
+  // Normal award.
   if(winner>=0){
-    // Poach: if the winner already holds this slot, their old player slides to
-    // the other team (free consolation) before the new one takes the slot.
-    if(G.rosters[winner][pos]){
-      const rival = 1 - winner;
-      const old = G.rosters[winner][pos];
-      G.rosters[rival][pos] = { ...old, cost:0 };
-      A.poached = { to: rival, oldName: old.name };
-    }
     G.coins[winner] -= price;
     G.rosters[winner][pos] = { name:p.n, rating:p.r, cost:price, era:p.e };
   }
-
   renderScoreboard();
-  renderRosters('rostersDraft', A.poached ? -2 : winner, pos);
-
+  renderRosters('rostersDraft', winner, pos);
   const tint = t => `<span style="color:${t===0?'var(--p1)':'var(--p2)'}">${G.names[t]}</span>`;
   $("resultNote").innerHTML = winner<0
       ? (note || `${p.n} went unclaimed.`)
-      : `${tint(winner)} lands <b>${p.n}</b> for <b style="color:var(--gold)">${price}</b> coin${price===1?'':'s'}`
-        + (A.poached ? ` — upgrade! <b>${A.poached.oldName}</b> slides to ${tint(A.poached.to)}` : ``);
-  $("phaseNote").textContent = "";
+      : `${tint(winner)} lands <b>${p.n}</b> for <b style="color:var(--gold)">${price}</b> coin${price===1?'':'s'}`;
   $("bidLeader").textContent = winner>=0 ? G.names[winner]+" wins" : "Unclaimed";
-  $("nextWrap").style.display = "";
+  finishRoundUI();
+}
 
+function finishRoundUI(){
+  $("nextWrap").style.display = "";
   const last = G.roundIdx >= G.rounds.length - 1;
   $("nextBtn").textContent = last ? "See Final Result →" : "Next Round →";
+}
+
+// The poach winner holds two players at this slot. They keep one; the other is
+// sold to the rival, who pays that player's original bid price (capped at coins).
+function offerPoachChoice(winner, pos, oldP, newP){
+  const rival = 1 - winner;
+  setStatus(0,"",""); setStatus(1,"","");   // auction's over — clear stale turn prompts
+  const tint = t => `<span style="color:${t===0?'var(--p1)':'var(--p2)'}">${G.names[t]}</span>`;
+  $("poachPrompt").innerHTML =
+      `${tint(winner)} poached <b>${newP.name}</b> for <b style="color:var(--gold)">${newP.cost}</b>! `
+    + `Keep one at ${pos} — the other is sold to ${tint(rival)} for the price it was won at.`;
+
+  const price = pl => Math.min(pl.cost, G.coins[rival]); // what the rival can actually pay
+  const mk = (keep, give) =>
+      `<button class="btn poach-choice" data-keepnew="${keep===newP?1:0}">`
+    + `Keep ${keep.name} <span style="opacity:.75">(OVR ${keep.rating})</span>`
+    + `<small>sell ${give.name} to ${G.names[rival]} for ${price(give)}c</small></button>`;
+  $("poachBtns").innerHTML = mk(newP, oldP) + mk(oldP, newP);
+  $("poachBtns").querySelectorAll('.poach-choice').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const keepNew = btn.dataset.keepnew === '1';
+      finalizePoach(winner, pos, keepNew?newP:oldP, keepNew?oldP:newP);
+    });
+  });
+  $("poachWrap").style.display = "";
+}
+
+function finalizePoach(winner, pos, kept, given){
+  const rival = 1 - winner;
+  const pay = Math.min(given.cost, G.coins[rival]);   // rival reimburses the player's price
+  G.coins[rival]  -= pay;
+  G.coins[winner] += pay;
+  G.rosters[winner][pos] = kept;
+  G.rosters[rival][pos]  = { ...given, cost: pay };
+  A.poached = true;
+
+  $("poachWrap").style.display = "none";
+  renderScoreboard();
+  renderRosters('rostersDraft', -2, pos);
+  const tint = t => `<span style="color:${t===0?'var(--p1)':'var(--p2)'}">${G.names[t]}</span>`;
+  $("resultNote").innerHTML =
+      `${tint(winner)} keeps <b>${kept.name}</b>; ${tint(rival)} pays `
+    + `<b style="color:var(--gold)">${pay}</b> coin${pay===1?'':'s'} for <b>${given.name}</b>.`;
+  finishRoundUI();
 }
 
 $("nextBtn").addEventListener('click', ()=>{
