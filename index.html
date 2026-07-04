@@ -264,8 +264,9 @@
         <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the same slot.</li>
         <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at — even if it forces them into the red. Keep the star, or sell it to drain their coins.</li>
         <li>Both rosters fill 1 of each position across <b>10 slots</b>. You can <b>bid past your coins</b> and go into debt to land a player.</li>
-        <li><b>Final score = roster skill + coins.</b> Each leftover coin is worth <b style="color:var(--good)">+3</b>, but each coin of <b>debt</b> costs <b style="color:var(--bad)">−5</b> — so overspending really stings.</li>
-        <li>At the buzzer a <b>luck roll</b> scales each score by a random <b>0.90–1.05×</b>, so the underdog always has a puncher's chance — the top score doesn't always win.</li>
+        <li><b>Final score = roster skill + coins.</b> Each leftover coin is worth <b style="color:var(--good)">+2</b>, but each coin of <b>debt</b> costs <b style="color:var(--bad)">−4</b> — so overspending really stings.</li>
+        <li>At the buzzer a <b>luck roll</b> scales each score by a random <b>±3%</b>, so the underdog always has a puncher's chance — the top score doesn't always win.</li>
+        <li>Also: once you <b>pass</b>, you're out of that auction — no coming back in.</li>
       </ul>
     </div>
 
@@ -774,40 +775,42 @@ document.querySelectorAll('.bid-btn').forEach(btn=>{
 
 function canBid(team){
   if(!A || A.settled) return false;
-  if(A.turn !== team) return false;     // only the player whose turn it is (both are eligible)
+  if(A.turn !== team) return false;     // only the player whose turn it is
+  if(A.passed[team]) return false;      // once you pass, you're out of this auction
   return true;
 }
 
 function doBid(team, inc){
   if(!canBid(team)) return;
-  const target = A.bid + inc;           // raise strictly above the current high
-  // No coin ceiling — you may bid into debt (each coin of debt costs 5 pts at the end).
-  A.bid = target;
-  A.leader = team;
-  A.turn = 1 - team;                    // hand the turn straight to the opponent
-  A.passed = [false,false];
-  A.tEnd = performance.now() + TURN_TIME; // reset the clock for the opponent
+  A.bid += inc;                         // raise strictly above the current high
+  A.leader = team;                      // (no coin ceiling — you may bid into debt)
   $("bidAmt").innerHTML = `${A.bid}<small> coins</small>`;
   $("bidLeader").textContent = G.names[team] + " leads";
   $("bidLeader").className = "leader " + (team===0?"p1":"p2");
+
+  const opp = 1 - team;
+  if(A.passed[opp]){                     // opponent already bowed out — nobody left to answer
+    settleAuction(team, A.bid);
+    return;
+  }
+  A.turn = opp;                          // hand the turn to the opponent
+  A.tEnd = performance.now() + TURN_TIME; // reset the clock
   setTurnUI();
 }
 
 function doPass(team){
   if(!A || A.settled || A.turn !== team) return; // only the active player can pass
+  A.passed[team] = true;                 // passing is FINAL — you can't bid again this auction
   if(A.leader >= 0){
-    settleAuction(A.leader, A.bid);      // concede — the last bidder wins
+    settleAuction(A.leader, A.bid);      // a bid stands → concede, the leader wins
     return;
   }
-  // No bids yet: record the pass and hand the opening turn to the opponent.
-  A.passed[team] = true;
   const o = 1 - team;
   if(A.passed[o]){
-    // Nobody wanted this player → discard and draft a new one for this slot.
-    discardAndRedraft();
+    discardAndRedraft();                 // both bowed out with no bid → discard
     return;
   }
-  A.turn = o;
+  A.turn = o;                            // opponent still gets their opening move
   A.tEnd = performance.now() + TURN_TIME;
   setTurnUI();
 }
@@ -984,9 +987,9 @@ function renderScoreboard(){
   $("chip2").querySelector('.coins').textContent = G.coins[1];
 }
 
-const COIN_BONUS = 3;    // each leftover coin adds this to the score
-const COIN_PENALTY = 5;  // each coin of DEBT subtracts this (debt hurts more than reserve helps)
-const LUCK_LOW = 0.90, LUCK_HIGH = 1.05; // final score is scaled by a random factor in this range
+const COIN_BONUS = 2;    // each leftover coin adds this to the score
+const COIN_PENALTY = 4;  // each coin of DEBT subtracts this (debt hurts more than reserve helps)
+const LUCK_LOW = 0.97, LUCK_HIGH = 1.03; // final score scaled by a random ±3% factor
 
 // Reserve rewards at +3/coin; debt punishes at -5/coin.
 function coinScore(c){ return c >= 0 ? c*COIN_BONUS : c*COIN_PENALTY; }
