@@ -371,9 +371,9 @@
   const GRID_SPACING = 30;        // px between grid dots (half again the density)
   const GRID_OVERFLOW = 0;        // mesh does not extend past the viewport edges
   const SPAWN_INTERVAL = 10;      // seconds between new voids
-  const THRUST_ACCEL = 720;       // player thrust from WASD/arrows (px/s^2)
-  const MAX_SPEED = 640;          // px/s velocity clamp — tames runaway slingshots
-  const GRAV_STRENGTH = 320;      // base pull of a void (scaled per-void by its random size)
+  const THRUST_ACCEL = 750;       // player thrust from WASD/arrows (px/s^2)
+  const MAX_SPEED = 600;          // px/s velocity clamp — tames runaway slingshots
+  const GRAV_STRENGTH = 300;      // base pull of a void (scaled per-void by its random size)
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
   const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
   // No medium drag: momentum is conserved. Only gravity and your thrust change
@@ -727,6 +727,11 @@
   // toward the center: averaging three randoms gives a bell-ish distribution
   // that peaks in the middle, so voids cluster centrally but can still reach out.
   function ctrand() { return (Math.random() + Math.random() + Math.random()) / 3; }
+  // keep new voids from swallowing pickups the player is heading for
+  function nearPowerup(x, y) {
+    for (const pu of powerups) if (Math.hypot(x - pu.x, y - pu.y) < 170 * SC) return true;
+    return false;
+  }
   function holePos() {
     const mx = isEasy() ? W * 0.24 : 80 * SC;
     const my = isEasy() ? H * 0.24 : 100 * SC;
@@ -735,7 +740,7 @@
       x = mx + ctrand() * (W - mx * 2);
       y = my + ctrand() * (H - my * 2);
       tries++;
-    } while (Math.hypot(x - ship.x, y - ship.y) < 300 * SC && tries < 30);
+    } while ((Math.hypot(x - ship.x, y - ship.y) < 300 * SC || nearPowerup(x, y)) && tries < 30);
     return [x, y];
   }
   function makeVoid(x, y) {
@@ -1090,7 +1095,7 @@
 
     // soft edge repulsion: a gentle inward push that ramps up as the ship nears
     // a border, easing it back toward the field before it ever hits the wall
-    const em = 130 * SC, epush = 620 * SC;
+    const em = 130 * SC, epush = 1240 * SC;
     if (ship.x < em)          ship.vx += epush * (1 - ship.x / em) * sdt;
     else if (ship.x > W - em) ship.vx -= epush * (1 - (W - ship.x) / em) * sdt;
     if (ship.y < em)          ship.vy += epush * (1 - ship.y / em) * sdt;
