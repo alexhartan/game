@@ -373,7 +373,7 @@
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 720;       // player thrust from WASD/arrows (px/s^2)
   const MAX_SPEED = 640;          // px/s velocity clamp — tames runaway slingshots
-  const GRAV_STRENGTH = 360;      // base pull of a void (scaled per-void by its random size)
+  const GRAV_STRENGTH = 320;      // base pull of a void (scaled per-void by its random size)
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
   const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
   // No medium drag: momentum is conserved. Only gravity and your thrust change
@@ -1087,6 +1087,14 @@
     const [gx, gy] = gravityAt(ship.x, ship.y);
     ship.vx += gx * gmult * sdt;
     ship.vy += gy * gmult * sdt;
+
+    // soft edge repulsion: a gentle inward push that ramps up as the ship nears
+    // a border, easing it back toward the field before it ever hits the wall
+    const em = 130 * SC, epush = 620 * SC;
+    if (ship.x < em)          ship.vx += epush * (1 - ship.x / em) * sdt;
+    else if (ship.x > W - em) ship.vx -= epush * (1 - (W - ship.x) / em) * sdt;
+    if (ship.y < em)          ship.vy += epush * (1 - ship.y / em) * sdt;
+    else if (ship.y > H - em) ship.vy -= epush * (1 - (H - ship.y) / em) * sdt;
 
     // velocity clamp: orbital speeds sit well under this, so interior play is
     // unchanged — it only caps the runaway speed a slingshot can hand you, so
