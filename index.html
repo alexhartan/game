@@ -263,8 +263,9 @@
         <li>Pass while a bid stands and you concede — the last bidder wins, pays the coins, and locks the player into that slot.</li>
         <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the same slot.</li>
         <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at — even if it forces them into the red. Keep the star, or sell it to drain their coins.</li>
-        <li>Both rosters fill 1 of each position across <b>10 slots</b>.</li>
-        <li><b>Final score = roster skill + leftover coins ×3.</b> A 5-coin reserve adds 15; a negative balance subtracts. Highest score wins — so spend hard, but not into a hole.</li>
+        <li>Both rosters fill 1 of each position across <b>10 slots</b>. You can <b>bid past your coins</b> and go into debt to land a player.</li>
+        <li><b>Final score = roster skill + coins.</b> Each leftover coin is worth <b style="color:var(--good)">+3</b>, but each coin of <b>debt</b> costs <b style="color:var(--bad)">−5</b> — so overspending really stings.</li>
+        <li>At the buzzer a <b>luck roll</b> scales each score by a random <b>0.90–1.05×</b>, so the underdog always has a puncher's chance — the top score doesn't always win.</li>
       </ul>
     </div>
 
@@ -780,10 +781,7 @@ function canBid(team){
 function doBid(team, inc){
   if(!canBid(team)) return;
   const target = A.bid + inc;           // raise strictly above the current high
-  if(target > G.coins[team]){
-    setStatus(team, "", `Only ${G.coins[team]} coins!`);
-    return;
-  }
+  // No coin ceiling — you may bid into debt (each coin of debt costs 5 pts at the end).
   A.bid = target;
   A.leader = team;
   A.turn = 1 - team;                    // hand the turn straight to the opponent
@@ -966,9 +964,7 @@ function updateBidButtons(){
       btn.disabled = !myTurn;
       return;
     }
-    let ok = myTurn;
-    if(ok && A.bid + (+btn.dataset.inc) > G.coins[team]) ok = false; // can't exceed your coins
-    btn.disabled = !ok;
+    btn.disabled = !myTurn;   // no coin ceiling — bidding into the red is allowed
   });
 }
 function disableAllBidButtons(){ document.querySelectorAll('.bid-btn').forEach(b=>b.disabled=true); }
@@ -988,9 +984,14 @@ function renderScoreboard(){
   $("chip2").querySelector('.coins').textContent = G.coins[1];
 }
 
-const COIN_MULT = 3;   // every leftover coin is worth this much at the final buzzer
+const COIN_BONUS = 3;    // each leftover coin adds this to the score
+const COIN_PENALTY = 5;  // each coin of DEBT subtracts this (debt hurts more than reserve helps)
+const LUCK_LOW = 0.90, LUCK_HIGH = 1.05; // final score is scaled by a random factor in this range
+
+// Reserve rewards at +3/coin; debt punishes at -5/coin.
+function coinScore(c){ return c >= 0 ? c*COIN_BONUS : c*COIN_PENALTY; }
 function rosterTotal(t){ return POSITIONS.reduce((s,pos)=> s + (G.rosters[t][pos]?G.rosters[t][pos].rating:0), 0); }
-function scoreOf(t){ return rosterTotal(t) + G.coins[t]*COIN_MULT; }   // skill + coin reserve ×3
+function scoreOf(t){ return rosterTotal(t) + coinScore(G.coins[t]); }   // pre-luck base score
 
 function renderRosters(containerId, hotTeam, hotPos){
   const c = $(containerId);
@@ -1018,25 +1019,32 @@ function renderRosters(containerId, hotTeam, hotPos){
 function endGame(){
   showScreen('screen-results');
   const skill = [rosterTotal(0), rosterTotal(1)];
-  const scores = [scoreOf(0), scoreOf(1)];
-  const winner = scores[0]>scores[1] ? 0 : (scores[1]>scores[0] ? 1 : -1);
-  // e.g. "+15" for 5 coins, "−9" for -3 coins (each coin ×3)
-  const cp = t => (G.coins[t]>=0?'+':'−') + Math.abs(G.coins[t])*COIN_MULT;
-  const line = t => `${G.names[t]}: <b>${scores[t]}</b> = ${skill[t]} skill ${cp(t)} (${G.coins[t]}c×${COIN_MULT})`;
+  const base  = [scoreOf(0), scoreOf(1)];
+  // Luck roll: scale each base score by a random factor, so the top score
+  // doesn't always win — the underdog gets a puncher's chance.
+  const luck  = [0,1].map(()=> LUCK_LOW + Math.random()*(LUCK_HIGH-LUCK_LOW));
+  const final = [0,1].map(t=> Math.round(base[t]*luck[t]));
+  const winner = final[0]>final[1] ? 0 : (final[1]>final[0] ? 1 : -1);
+
+  const cp = t => { const cs = coinScore(G.coins[t]); return (cs>=0?'+':'−') + Math.abs(cs); };
+  const line = t =>
+      `${G.names[t]}: base <b>${base[t]}</b> (${skill[t]} skill ${cp(t)} coins) `
+    + `× luck ${luck[t].toFixed(2)} = <b style="color:var(--gold)">${final[t]}</b>`;
 
   const wn = $("winnerName");
   if(winner===-1){
     wn.textContent = "It's a Tie!";
     wn.className = "winner-name tie";
-    $("resultSub").innerHTML = `Both finish on <b>${scores[0]}</b>. Split the trophy.<br>` +
-      `<span style="font-size:.88em;color:var(--dim)">${line(0)} &nbsp;•&nbsp; ${line(1)}</span>`;
+    $("resultSub").innerHTML = `Both land on <b>${final[0]}</b> after the luck roll.<br>` +
+      `<span style="font-size:.85em;color:var(--dim)">${line(0)}<br>${line(1)}</span>`;
   } else {
     wn.textContent = G.names[winner] + " wins!";
     wn.className = "winner-name " + (winner===0?"p1":"p2");
-    const margin = Math.abs(scores[0]-scores[1]);
+    const upset = base[winner] < base[1-winner];
     $("resultSub").innerHTML =
-      `Final <b style="color:var(--gold)">${scores[winner]}</b> vs ${scores[1-winner]} — a ${margin}-point edge.<br>` +
-      `<span style="font-size:.88em;color:var(--dim)">${line(winner)} &nbsp;•&nbsp; ${line(1-winner)}</span>`;
+      `Final <b style="color:var(--gold)">${final[winner]}</b> vs ${final[1-winner]}` +
+      (upset ? ` — an <b>upset!</b> The luck roll flipped it.` : ``) + `<br>` +
+      `<span style="font-size:.85em;color:var(--dim)">${line(winner)}<br>${line(1-winner)}</span>`;
   }
   renderRosters('rostersFinal', -1, null);
 }
