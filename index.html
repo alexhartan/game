@@ -220,6 +220,27 @@
   .slot.hot { border-color: var(--gold); animation: hot .8s ease; }
   @keyframes hot { from { background: rgba(255,209,92,.25);} to {background:#0a0e1c;} }
 
+  /* ---------- Trait chips ---------- */
+  .tchip {
+    display:inline-block; font-size:9px; font-weight:900; letter-spacing:.03em;
+    padding:1px 5px; border-radius:5px; margin-left:3px; vertical-align:middle;
+    color:#0a0d16;
+  }
+  .tshoot { background:#47e6a0; }   /* spacing  */
+  .trim   { background:#4db1ff; }   /* rim      */
+  .tdef   { background:#7bd6c0; }   /* defense  */
+  .tcreate{ background:#b79cff; }   /* creation */
+  .tiso   { background:#ff9d5c; }   /* iso      */
+  .reel-caption .tchip { font-size:10px; }
+
+  /* ---------- Team fit bars ---------- */
+  .fitrow { display:flex; align-items:center; gap:6px; margin:2px 0 10px; }
+  .fitbar { flex:1; display:flex; align-items:center; gap:4px; }
+  .fitlbl { font-size:9px; font-weight:800; color:var(--dim); width:24px; letter-spacing:.02em; }
+  .fitmeter { flex:1; height:5px; border-radius:999px; background:#0a0e1c; overflow:hidden; border:1px solid var(--line); }
+  .fitmeter i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,var(--good),var(--gold)); transition:width .3s ease; }
+  .fitmult { font-size:12px; font-weight:900; color:var(--gold); margin-left:2px; }
+
   /* ---------- Results ---------- */
   .result-head { text-align:center; margin: 8px 0 4px; }
   .winner-name { font-size: clamp(28px,7vw,52px); font-weight:900; margin-top:6px; }
@@ -264,9 +285,9 @@
         <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the same slot.</li>
         <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at — even if it forces them into the red. Keep the star, or sell it to drain their coins.</li>
         <li>Both rosters fill 1 of each position across <b>10 slots</b>. You can <b>bid past your coins</b> and go into debt to land a player.</li>
-        <li><b>Final score = roster skill + coins.</b> Each leftover coin is worth <b style="color:var(--good)">+2</b>, but each coin of <b>debt</b> costs <b style="color:var(--bad)">−4</b> — so overspending really stings.</li>
-        <li>At the buzzer a <b>luck roll</b> scales each score by a random <b>±3%</b>, so the underdog always has a puncher's chance — the top score doesn't always win.</li>
-        <li>Also: once you <b>pass</b>, you're out of that auction — no coming back in.</li>
+        <li>Once you <b>pass</b>, you're out of that auction — no coming back in.</li>
+        <li><b>Team fit (chemistry):</b> a balanced roster scores more. Four factors — <b>Spacing</b> (3P), <b>Defense</b> (RIM/DEF), <b>Creation</b> (CRT/ISO), and <b>Chemistry</b> (covering all of it) — each rate your five players and together boost skill by up to <b>+25%</b>. Draft for fit, not just OVR.</li>
+        <li><b>Final = skill × fit + coins</b> (each reserve coin <b style="color:var(--good)">+2</b>, each debt coin <b style="color:var(--bad)">−4</b>), then an <b>X-Factor</b> roll (random <b>±3%</b>) so the underdog always has a puncher's chance.</li>
       </ul>
     </div>
 
@@ -379,114 +400,116 @@
 /* ---------- Player database ----------
    Well-known All-Stars, 1990 -> present. rating ~ peak star power.
    era = the decade(s) they starred, for flavor. */
+/* traits: shoot=spacing, rim=rim protection/anchor, def=perimeter D,
+   create=playmaker/floor general, iso=walking bucket / self-creation */
 const DB = {
   PG: [
-    { n:"Magic Johnson", r:97, e:"'90-'91" },
-    { n:"John Stockton", r:88, e:"'90s" },
-    { n:"Gary Payton", r:90, e:"'90s-'00s" },
-    { n:"Isiah Thomas", r:88, e:"early '90s" },
-    { n:"Tim Hardaway", r:85, e:"'90s" },
-    { n:"Jason Kidd", r:90, e:"'90s-'00s" },
-    { n:"Steve Nash", r:92, e:"'00s" },
-    { n:"Allen Iverson", r:93, e:"'00s" },
-    { n:"Chauncey Billups", r:84, e:"'00s" },
-    { n:"Tony Parker", r:86, e:"'00s-'10s" },
-    { n:"Chris Paul", r:94, e:"'00s-'10s" },
-    { n:"Derrick Rose", r:88, e:"'10s" },
-    { n:"Russell Westbrook", r:93, e:"'10s" },
-    { n:"Stephen Curry", r:98, e:"'10s-now" },
-    { n:"Kyrie Irving", r:90, e:"'10s-now" },
-    { n:"Damian Lillard", r:92, e:"'10s-now" },
-    { n:"John Wall", r:84, e:"'10s" },
-    { n:"Kyle Lowry", r:84, e:"'10s" },
-    { n:"Ja Morant", r:88, e:"now" },
-    { n:"Trae Young", r:86, e:"now" },
-    { n:"Luka Doncic", r:95, e:"now" },
+    { n:"Magic Johnson", r:97, e:"'90-'91", t:["create"] },
+    { n:"John Stockton", r:88, e:"'90s", t:["create","def"] },
+    { n:"Gary Payton", r:90, e:"'90s-'00s", t:["def","create","iso"] },
+    { n:"Isiah Thomas", r:88, e:"early '90s", t:["create","iso"] },
+    { n:"Tim Hardaway", r:85, e:"'90s", t:["create","shoot","iso"] },
+    { n:"Jason Kidd", r:90, e:"'90s-'00s", t:["create","def"] },
+    { n:"Steve Nash", r:92, e:"'00s", t:["create","shoot"] },
+    { n:"Allen Iverson", r:93, e:"'00s", t:["iso","create"] },
+    { n:"Chauncey Billups", r:84, e:"'00s", t:["create","shoot","def"] },
+    { n:"Tony Parker", r:86, e:"'00s-'10s", t:["create","iso"] },
+    { n:"Chris Paul", r:94, e:"'00s-'10s", t:["create","def"] },
+    { n:"Derrick Rose", r:88, e:"'10s", t:["iso","create"] },
+    { n:"Russell Westbrook", r:93, e:"'10s", t:["create","iso"] },
+    { n:"Stephen Curry", r:98, e:"'10s-now", t:["shoot","create","iso"] },
+    { n:"Kyrie Irving", r:90, e:"'10s-now", t:["iso","shoot","create"] },
+    { n:"Damian Lillard", r:92, e:"'10s-now", t:["shoot","iso","create"] },
+    { n:"John Wall", r:84, e:"'10s", t:["create","def"] },
+    { n:"Kyle Lowry", r:84, e:"'10s", t:["shoot","def","create"] },
+    { n:"Ja Morant", r:88, e:"now", t:["iso","create"] },
+    { n:"Trae Young", r:86, e:"now", t:["shoot","create","iso"] },
+    { n:"Luka Doncic", r:95, e:"now", t:["create","iso","shoot"] },
   ],
   SG: [
-    { n:"Michael Jordan", r:99, e:"'90s" },
-    { n:"Clyde Drexler", r:90, e:"'90s" },
-    { n:"Reggie Miller", r:87, e:"'90s" },
-    { n:"Mitch Richmond", r:84, e:"'90s" },
-    { n:"Ray Allen", r:88, e:"'00s" },
-    { n:"Kobe Bryant", r:98, e:"'00s" },
-    { n:"Tracy McGrady", r:92, e:"'00s" },
-    { n:"Vince Carter", r:89, e:"'00s" },
-    { n:"Dwyane Wade", r:94, e:"'00s-'10s" },
-    { n:"Manu Ginobili", r:85, e:"'00s" },
-    { n:"Gilbert Arenas", r:85, e:"'00s" },
-    { n:"Michael Redd", r:82, e:"'00s" },
-    { n:"James Harden", r:95, e:"'10s" },
-    { n:"Klay Thompson", r:86, e:"'10s" },
-    { n:"DeMar DeRozan", r:85, e:"'10s-now" },
-    { n:"Bradley Beal", r:84, e:"'10s-now" },
-    { n:"Devin Booker", r:89, e:"now" },
-    { n:"Donovan Mitchell", r:87, e:"now" },
-    { n:"Anthony Edwards", r:89, e:"now" },
+    { n:"Michael Jordan", r:99, e:"'90s", t:["iso","def","create"] },
+    { n:"Clyde Drexler", r:90, e:"'90s", t:["iso","def"] },
+    { n:"Reggie Miller", r:87, e:"'90s", t:["shoot"] },
+    { n:"Mitch Richmond", r:84, e:"'90s", t:["iso","shoot"] },
+    { n:"Ray Allen", r:88, e:"'00s", t:["shoot"] },
+    { n:"Kobe Bryant", r:98, e:"'00s", t:["iso","def"] },
+    { n:"Tracy McGrady", r:92, e:"'00s", t:["iso","create"] },
+    { n:"Vince Carter", r:89, e:"'00s", t:["iso","shoot"] },
+    { n:"Dwyane Wade", r:94, e:"'00s-'10s", t:["iso","create","def"] },
+    { n:"Manu Ginobili", r:85, e:"'00s", t:["create","iso","def"] },
+    { n:"Gilbert Arenas", r:85, e:"'00s", t:["iso","shoot"] },
+    { n:"Michael Redd", r:82, e:"'00s", t:["shoot","iso"] },
+    { n:"James Harden", r:95, e:"'10s", t:["iso","create","shoot"] },
+    { n:"Klay Thompson", r:86, e:"'10s", t:["shoot","def"] },
+    { n:"DeMar DeRozan", r:85, e:"'10s-now", t:["iso"] },
+    { n:"Bradley Beal", r:84, e:"'10s-now", t:["iso","shoot"] },
+    { n:"Devin Booker", r:89, e:"now", t:["iso","shoot","create"] },
+    { n:"Donovan Mitchell", r:87, e:"now", t:["iso","shoot"] },
+    { n:"Anthony Edwards", r:89, e:"now", t:["iso","shoot","def"] },
   ],
   SF: [
-    { n:"Scottie Pippen", r:91, e:"'90s" },
-    { n:"Dominique Wilkins", r:87, e:"early '90s" },
-    { n:"Grant Hill", r:89, e:"'90s-'00s" },
-    { n:"Chris Mullin", r:83, e:"'90s" },
-    { n:"Glen Rice", r:82, e:"'90s" },
-    { n:"Paul Pierce", r:89, e:"'00s" },
-    { n:"LeBron James", r:99, e:"'00s-now" },
-    { n:"Carmelo Anthony", r:90, e:"'00s-'10s" },
-    { n:"Kevin Durant", r:97, e:"'10s-now" },
-    { n:"Kawhi Leonard", r:94, e:"'10s-now" },
-    { n:"Paul George", r:89, e:"'10s-now" },
-    { n:"Jimmy Butler", r:90, e:"'10s-now" },
-    { n:"Andre Iguodala", r:80, e:"'10s" },
-    { n:"Gordon Hayward", r:81, e:"'10s" },
-    { n:"Shawn Marion", r:84, e:"'00s" },
-    { n:"Jayson Tatum", r:93, e:"now" },
-    { n:"Brandon Ingram", r:82, e:"now" },
-    { n:"Khris Middleton", r:83, e:"'10s-now" },
+    { n:"Scottie Pippen", r:91, e:"'90s", t:["def","create"] },
+    { n:"Dominique Wilkins", r:87, e:"early '90s", t:["iso"] },
+    { n:"Grant Hill", r:89, e:"'90s-'00s", t:["create","iso"] },
+    { n:"Chris Mullin", r:83, e:"'90s", t:["shoot"] },
+    { n:"Glen Rice", r:82, e:"'90s", t:["shoot"] },
+    { n:"Paul Pierce", r:89, e:"'00s", t:["iso","shoot"] },
+    { n:"LeBron James", r:99, e:"'00s-now", t:["create","iso","def"] },
+    { n:"Carmelo Anthony", r:90, e:"'00s-'10s", t:["iso","shoot"] },
+    { n:"Kevin Durant", r:97, e:"'10s-now", t:["iso","shoot"] },
+    { n:"Kawhi Leonard", r:94, e:"'10s-now", t:["def","iso"] },
+    { n:"Paul George", r:89, e:"'10s-now", t:["shoot","def","iso"] },
+    { n:"Jimmy Butler", r:90, e:"'10s-now", t:["def","iso","create"] },
+    { n:"Andre Iguodala", r:80, e:"'10s", t:["def","create"] },
+    { n:"Gordon Hayward", r:81, e:"'10s", t:["shoot","create"] },
+    { n:"Shawn Marion", r:84, e:"'00s", t:["def","rim"] },
+    { n:"Jayson Tatum", r:93, e:"now", t:["iso","shoot","def"] },
+    { n:"Brandon Ingram", r:82, e:"now", t:["iso","shoot"] },
+    { n:"Khris Middleton", r:83, e:"'10s-now", t:["shoot","iso"] },
   ],
   PF: [
-    { n:"Karl Malone", r:95, e:"'90s" },
-    { n:"Charles Barkley", r:94, e:"'90s" },
-    { n:"Dennis Rodman", r:82, e:"'90s" },
-    { n:"Chris Webber", r:89, e:"'90s-'00s" },
-    { n:"Kevin Garnett", r:95, e:"'00s" },
-    { n:"Tim Duncan", r:96, e:"'00s" },
-    { n:"Dirk Nowitzki", r:95, e:"'00s-'10s" },
-    { n:"Rasheed Wallace", r:83, e:"'00s" },
-    { n:"Amar'e Stoudemire", r:87, e:"'00s" },
-    { n:"Pau Gasol", r:87, e:"'00s-'10s" },
-    { n:"Chris Bosh", r:85, e:"'00s-'10s" },
-    { n:"Blake Griffin", r:86, e:"'10s" },
-    { n:"LaMarcus Aldridge", r:85, e:"'10s" },
-    { n:"Kevin Love", r:85, e:"'10s" },
-    { n:"Anthony Davis", r:93, e:"'10s-now" },
-    { n:"Draymond Green", r:83, e:"'10s-now" },
-    { n:"Giannis Antetokounmpo", r:97, e:"now" },
-    { n:"Julius Randle", r:83, e:"now" },
-    { n:"Domantas Sabonis", r:85, e:"now" },
-    { n:"Pascal Siakam", r:84, e:"now" },
+    { n:"Karl Malone", r:95, e:"'90s", t:["iso","rim"] },
+    { n:"Charles Barkley", r:94, e:"'90s", t:["rim","iso"] },
+    { n:"Dennis Rodman", r:82, e:"'90s", t:["rim","def"] },
+    { n:"Chris Webber", r:89, e:"'90s-'00s", t:["create","rim"] },
+    { n:"Kevin Garnett", r:95, e:"'00s", t:["def","rim","create"] },
+    { n:"Tim Duncan", r:96, e:"'00s", t:["rim","def"] },
+    { n:"Dirk Nowitzki", r:95, e:"'00s-'10s", t:["shoot","iso"] },
+    { n:"Rasheed Wallace", r:83, e:"'00s", t:["shoot","def","rim"] },
+    { n:"Amar'e Stoudemire", r:87, e:"'00s", t:["rim","iso"] },
+    { n:"Pau Gasol", r:87, e:"'00s-'10s", t:["rim","create"] },
+    { n:"Chris Bosh", r:85, e:"'00s-'10s", t:["shoot","rim"] },
+    { n:"Blake Griffin", r:86, e:"'10s", t:["rim","create"] },
+    { n:"LaMarcus Aldridge", r:85, e:"'10s", t:["iso","rim"] },
+    { n:"Kevin Love", r:85, e:"'10s", t:["shoot","rim"] },
+    { n:"Anthony Davis", r:93, e:"'10s-now", t:["rim","def","iso"] },
+    { n:"Draymond Green", r:83, e:"'10s-now", t:["def","create","rim"] },
+    { n:"Giannis Antetokounmpo", r:97, e:"now", t:["rim","def","create"] },
+    { n:"Julius Randle", r:83, e:"now", t:["iso","rim"] },
+    { n:"Domantas Sabonis", r:85, e:"now", t:["create","rim"] },
+    { n:"Pascal Siakam", r:84, e:"now", t:["iso","def"] },
   ],
   C: [
-    { n:"Hakeem Olajuwon", r:97, e:"'90s" },
-    { n:"David Robinson", r:95, e:"'90s" },
-    { n:"Patrick Ewing", r:92, e:"'90s" },
-    { n:"Shaquille O'Neal", r:98, e:"'90s-'00s" },
-    { n:"Alonzo Mourning", r:88, e:"'90s-'00s" },
-    { n:"Dikembe Mutombo", r:83, e:"'90s" },
-    { n:"Vlade Divac", r:80, e:"'90s-'00s" },
-    { n:"Ben Wallace", r:83, e:"'00s" },
-    { n:"Yao Ming", r:87, e:"'00s" },
-    { n:"Dwight Howard", r:90, e:"'00s-'10s" },
-    { n:"Marc Gasol", r:85, e:"'10s" },
-    { n:"Al Horford", r:83, e:"'10s-now" },
-    { n:"DeMarcus Cousins", r:87, e:"'10s" },
-    { n:"Rudy Gobert", r:85, e:"'10s-now" },
-    { n:"Karl-Anthony Towns", r:87, e:"'10s-now" },
-    { n:"Joel Embiid", r:95, e:"now" },
-    { n:"Nikola Jokic", r:97, e:"now" },
-    { n:"Bam Adebayo", r:85, e:"now" },
-    { n:"DeAndre Jordan", r:80, e:"'10s" },
-    { n:"Brook Lopez", r:82, e:"'10s-now" },
+    { n:"Hakeem Olajuwon", r:97, e:"'90s", t:["rim","def","iso"] },
+    { n:"David Robinson", r:95, e:"'90s", t:["rim","def"] },
+    { n:"Patrick Ewing", r:92, e:"'90s", t:["rim","iso"] },
+    { n:"Shaquille O'Neal", r:98, e:"'90s-'00s", t:["rim","iso"] },
+    { n:"Alonzo Mourning", r:88, e:"'90s-'00s", t:["rim","def"] },
+    { n:"Dikembe Mutombo", r:83, e:"'90s", t:["rim","def"] },
+    { n:"Vlade Divac", r:80, e:"'90s-'00s", t:["create","rim"] },
+    { n:"Ben Wallace", r:83, e:"'00s", t:["rim","def"] },
+    { n:"Yao Ming", r:87, e:"'00s", t:["rim"] },
+    { n:"Dwight Howard", r:90, e:"'00s-'10s", t:["rim","def"] },
+    { n:"Marc Gasol", r:85, e:"'10s", t:["rim","create"] },
+    { n:"Al Horford", r:83, e:"'10s-now", t:["rim","shoot","def"] },
+    { n:"DeMarcus Cousins", r:87, e:"'10s", t:["rim","iso"] },
+    { n:"Rudy Gobert", r:85, e:"'10s-now", t:["rim","def"] },
+    { n:"Karl-Anthony Towns", r:87, e:"'10s-now", t:["shoot","rim"] },
+    { n:"Joel Embiid", r:95, e:"now", t:["rim","iso","def"] },
+    { n:"Nikola Jokic", r:97, e:"now", t:["create","rim"] },
+    { n:"Bam Adebayo", r:85, e:"now", t:["def","rim","create"] },
+    { n:"DeAndre Jordan", r:80, e:"'10s", t:["rim","def"] },
+    { n:"Brook Lopez", r:82, e:"'10s-now", t:["rim","shoot"] },
   ],
 };
 
@@ -672,12 +695,18 @@ function onReelLanded(){
     reel.landedNode.appendChild(b);
   }
   const cap = $("reelCaption");
-  cap.innerHTML = `<b>${p.n}</b> — ${starWord(p.r)} · ${POS_NAMES[pos]}`;
+  cap.innerHTML = `<b>${p.n}</b> — ${starWord(p.r)} · ${POS_NAMES[pos]} ${traitChips(p.t)}`;
   cap.classList.add('show');
 
   $("stopPhase").style.display = "none";
   $("revealPhase").style.display = "";
   startAuction(p, pos);
+}
+
+// Small colored chips for a player's archetypes.
+const TRAIT_INFO = { shoot:["3P","tshoot"], rim:["RIM","trim"], def:["DEF","tdef"], create:["CRT","tcreate"], iso:["ISO","tiso"] };
+function traitChips(traits){
+  return (traits||[]).map(tag=> TRAIT_INFO[tag] ? `<span class="tchip ${TRAIT_INFO[tag][1]}">${TRAIT_INFO[tag][0]}</span>` : '').join('');
 }
 
 function starWord(r){
@@ -878,7 +907,7 @@ function concludeAuction(winner, price, note){
   if(winner>=0 && G.rosters[winner][pos]){
     G.coins[winner] -= price;                       // pay the bank for the poached player
     const oldP = G.rosters[winner][pos];            // carries its earlier price
-    const newP = { name:p.n, rating:p.r, cost:price, era:p.e };
+    const newP = { name:p.n, rating:p.r, cost:price, era:p.e, t:p.t };
     $("bidLeader").textContent = G.names[winner] + " poaches!";
     offerPoachChoice(winner, pos, oldP, newP);
     return;                                          // finished once the winner chooses
@@ -887,7 +916,7 @@ function concludeAuction(winner, price, note){
   // Normal award.
   if(winner>=0){
     G.coins[winner] -= price;
-    G.rosters[winner][pos] = { name:p.n, rating:p.r, cost:price, era:p.e };
+    G.rosters[winner][pos] = { name:p.n, rating:p.r, cost:price, era:p.e, t:p.t };
   }
   renderScoreboard();
   renderRosters('rostersDraft', winner, pos);
@@ -989,12 +1018,39 @@ function renderScoreboard(){
 
 const COIN_BONUS = 2;    // each leftover coin adds this to the score
 const COIN_PENALTY = 4;  // each coin of DEBT subtracts this (debt hurts more than reserve helps)
-const LUCK_LOW = 0.97, LUCK_HIGH = 1.03; // final score scaled by a random ±3% factor
+const XF_LOW = 0.97, XF_HIGH = 1.03;  // X-Factor: final score scaled by a random ±3%
+const FIT_MAX = 0.25;    // a perfectly balanced roster is worth up to +25% on its skill
 
-// Reserve rewards at +3/coin; debt punishes at -5/coin.
+// Reserve rewards at +2/coin; debt punishes at -4/coin.
 function coinScore(c){ return c >= 0 ? c*COIN_BONUS : c*COIN_PENALTY; }
 function rosterTotal(t){ return POSITIONS.reduce((s,pos)=> s + (G.rosters[t][pos]?G.rosters[t][pos].rating:0), 0); }
-function scoreOf(t){ return rosterTotal(t) + coinScore(G.coins[t]); }   // pre-luck base score
+
+/* ---------- Team fit (chemistry) ---------- */
+const FIT_LABELS = { spacing:"Spacing", defense:"Defense", creation:"Creation", chemistry:"Chemistry" };
+function clamp10(x){ return Math.max(0, Math.min(10, x)); }
+function traitCounts(t){
+  const c = { shoot:0, rim:0, def:0, create:0, iso:0 };
+  POSITIONS.forEach(pos=>{ const s = G.rosters[t][pos]; if(s && s.t) s.t.forEach(tag=>{ if(tag in c) c[tag]++; }); });
+  return c;
+}
+// Four 0–10 factor ratings from the roster's trait mix.
+function factorsOf(t){
+  const c = traitCounts(t);
+  const spacing  = [0,4,7,9,10,10][Math.min(c.shoot,5)];         // wants 2–3 shooters
+  const defense  = clamp10(c.rim*4 + c.def*2);                   // an anchor + wing D
+  const creation = clamp10(c.create*3.5 + c.iso*2);             // a real creator, plus scorers
+  // chemistry = breadth: how many of the 5 team needs are covered
+  const needs = [ c.shoot>=2, c.rim>=1, c.def>=1, c.create>=1, c.iso>=1 ];
+  const chemistry = needs.filter(Boolean).length * 2;
+  return { spacing, defense, creation, chemistry };
+}
+function fitOf(t){
+  const f = factorsOf(t);
+  const sum = f.spacing + f.defense + f.creation + f.chemistry;  // 0..40
+  return 1 + FIT_MAX*(sum/40);                                   // 1.00 .. 1.25
+}
+// Base score (pre X-Factor): skill scaled by team fit, plus the coin reserve.
+function scoreOf(t){ return Math.round(rosterTotal(t)*fitOf(t) + coinScore(G.coins[t])); }
 
 function renderRosters(containerId, hotTeam, hotPos){
   const c = $(containerId);
@@ -1007,11 +1063,14 @@ function renderRosters(containerId, hotTeam, hotPos){
       const slot = G.rosters[t][pos];
       const hot = (pos===hotPos && (t===hotTeam || hotTeam===-2)) ? " hot" : ""; // -2 = both teams (poach)
       if(slot){
-        return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
+        return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name} ${traitChips(slot.t)}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
       }
       return `<div class="slot empty"><span class="pp">${pos}</span><span class="nn">— empty —</span></div>`;
     }).join('');
-    div.innerHTML = `<h3><span class="nm">${G.names[t]}</span><span class="tot">Σ ${score} · ${tot} skill · ${coins}c</span></h3>${rows}`;
+    const f = factorsOf(t), fit = fitOf(t);
+    const bar = (lbl,v)=> `<div class="fitbar" title="${lbl} ${v}/10"><span class="fitlbl">${lbl}</span><span class="fitmeter"><i style="width:${v*10}%"></i></span></div>`;
+    const fitRow = `<div class="fitrow">${bar('SPC',f.spacing)}${bar('DEF',f.defense)}${bar('CRT',f.creation)}${bar('CHM',f.chemistry)}<span class="fitmult">×${fit.toFixed(2)}</span></div>`;
+    div.innerHTML = `<h3><span class="nm">${G.names[t]}</span><span class="tot">Σ ${score} · ${tot} skill · ${coins}c</span></h3>${fitRow}${rows}`;
     c.appendChild(div);
   }
 }
@@ -1022,32 +1081,33 @@ function renderRosters(containerId, hotTeam, hotPos){
 function endGame(){
   showScreen('screen-results');
   const skill = [rosterTotal(0), rosterTotal(1)];
+  const fit   = [fitOf(0), fitOf(1)];
   const base  = [scoreOf(0), scoreOf(1)];
-  // Luck roll: scale each base score by a random factor, so the top score
-  // doesn't always win — the underdog gets a puncher's chance.
-  const luck  = [0,1].map(()=> LUCK_LOW + Math.random()*(LUCK_HIGH-LUCK_LOW));
-  const final = [0,1].map(t=> Math.round(base[t]*luck[t]));
+  // X-Factor: scale each base score by a random ±3%, so the top score doesn't
+  // always win — the underdog gets a puncher's chance.
+  const xf    = [0,1].map(()=> XF_LOW + Math.random()*(XF_HIGH-XF_LOW));
+  const final = [0,1].map(t=> Math.round(base[t]*xf[t]));
   const winner = final[0]>final[1] ? 0 : (final[1]>final[0] ? 1 : -1);
 
   const cp = t => { const cs = coinScore(G.coins[t]); return (cs>=0?'+':'−') + Math.abs(cs); };
   const line = t =>
-      `${G.names[t]}: base <b>${base[t]}</b> (${skill[t]} skill ${cp(t)} coins) `
-    + `× luck ${luck[t].toFixed(2)} = <b style="color:var(--gold)">${final[t]}</b>`;
+      `${G.names[t]}: <b>${skill[t]}</b> skill × <b>${fit[t].toFixed(2)}</b> fit ${cp(t)} coins `
+    + `= ${base[t]} · X-Factor ${xf[t].toFixed(2)} → <b style="color:var(--gold)">${final[t]}</b>`;
 
   const wn = $("winnerName");
   if(winner===-1){
     wn.textContent = "It's a Tie!";
     wn.className = "winner-name tie";
-    $("resultSub").innerHTML = `Both land on <b>${final[0]}</b> after the luck roll.<br>` +
-      `<span style="font-size:.85em;color:var(--dim)">${line(0)}<br>${line(1)}</span>`;
+    $("resultSub").innerHTML = `Both land on <b>${final[0]}</b>.<br>` +
+      `<span style="font-size:.82em;color:var(--dim)">${line(0)}<br>${line(1)}</span>`;
   } else {
     wn.textContent = G.names[winner] + " wins!";
     wn.className = "winner-name " + (winner===0?"p1":"p2");
     const upset = base[winner] < base[1-winner];
     $("resultSub").innerHTML =
       `Final <b style="color:var(--gold)">${final[winner]}</b> vs ${final[1-winner]}` +
-      (upset ? ` — an <b>upset!</b> The luck roll flipped it.` : ``) + `<br>` +
-      `<span style="font-size:.85em;color:var(--dim)">${line(winner)}<br>${line(1-winner)}</span>`;
+      (upset ? ` — an <b>upset!</b> the X-Factor flipped it.` : ``) + `<br>` +
+      `<span style="font-size:.82em;color:var(--dim)">${line(winner)}<br>${line(1-winner)}</span>`;
   }
   renderRosters('rostersFinal', -1, null);
 }
