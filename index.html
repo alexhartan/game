@@ -173,11 +173,12 @@
   .legname { font-size: 13px; font-weight: 700; color: #e8ecff; line-height: 1.2; }
   .legdesc { font-size: 11px; color: #8a93bd; line-height: 1.2; }
 
-  /* segmented toggles (difficulty + control mode) */
-  .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
-  .puchoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
-  #ctrlChoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
-  .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
+  /* segmented toggles (mode + powerups + control): a horizontal row of groups,
+     each with its label stacked above its buttons */
+  .toggles { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-start; gap: 14px 26px; margin-top: 22px; }
+  .togglegroup { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; }
+  .ccbtns { display: flex; gap: 8px; }
   .ccbtn {
     padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
     color: #aab4e6; background: rgba(30,36,72,0.7);
@@ -271,22 +272,30 @@
   <div class="subtitle">Thrust with <b>WASD</b> or the <b>arrow keys</b>. Black holes tear open across space and never stop pulling — the closer you drift, the tighter the grip. Burn against it. Stay alive.</div>
   <div class="hint">Carry enough sideways speed and you'll orbit a void instead of falling in. A new one emerges every 10 seconds — the pull only compounds.<br>Fly into powerups to collect them, then trigger with <b>SPACE</b> (tap the icon on mobile).</div>
   <button class="btn" id="startBtn">Launch</button>
-  <div id="diffChoice" class="diffchoice">
-    <span class="cclabel">Mode</span>
-    <button class="ccbtn" data-mode="normal">Normal</button>
-    <button class="ccbtn" data-mode="easy">Easy</button>
+  <div class="toggles">
+    <div id="diffChoice" class="togglegroup diffchoice">
+      <span class="cclabel">Mode</span>
+      <div class="ccbtns">
+        <button class="ccbtn" data-mode="normal">Normal</button>
+        <button class="ccbtn" data-mode="easy">Easy</button>
+      </div>
+    </div>
+    <div class="togglegroup puchoice">
+      <span class="cclabel">Powerups</span>
+      <div class="ccbtns">
+        <button class="ccbtn" data-pu="on">On</button>
+        <button class="ccbtn" data-pu="off">Off</button>
+      </div>
+    </div>
+    <div id="ctrlChoice" class="togglegroup">
+      <span class="cclabel">Controls</span>
+      <div class="ccbtns">
+        <button class="ccbtn" data-mode="keys">Keyboard</button>
+        <button class="ccbtn" data-mode="mouse">Mouse</button>
+      </div>
+    </div>
   </div>
   <div id="diffNote"></div>
-  <div class="puchoice">
-    <span class="cclabel">Powerups</span>
-    <button class="ccbtn" data-pu="on">On</button>
-    <button class="ccbtn" data-pu="off">Off</button>
-  </div>
-  <div id="ctrlChoice">
-    <span class="cclabel">Controls</span>
-    <button class="ccbtn" data-mode="keys">Arrow Keys</button>
-    <button class="ccbtn" data-mode="stick">Joystick</button>
-  </div>
   <div class="legendwrap">
     <h3 class="legendtitle">Powerups</h3>
     <div id="legend" class="legend"></div>
@@ -316,15 +325,21 @@
       <div class="col"><h4>🖥 Desktop</h4><div class="list" data-dev="desktop"></div></div>
     </div>
   </div>
-  <div class="diffchoice">
-    <span class="cclabel">Mode</span>
-    <button class="ccbtn" data-mode="normal">Normal</button>
-    <button class="ccbtn" data-mode="easy">Easy</button>
-  </div>
-  <div class="puchoice">
-    <span class="cclabel">Powerups</span>
-    <button class="ccbtn" data-pu="on">On</button>
-    <button class="ccbtn" data-pu="off">Off</button>
+  <div class="toggles">
+    <div class="togglegroup diffchoice">
+      <span class="cclabel">Mode</span>
+      <div class="ccbtns">
+        <button class="ccbtn" data-mode="normal">Normal</button>
+        <button class="ccbtn" data-mode="easy">Easy</button>
+      </div>
+    </div>
+    <div class="togglegroup puchoice">
+      <span class="cclabel">Powerups</span>
+      <div class="ccbtns">
+        <button class="ccbtn" data-pu="on">On</button>
+        <button class="ccbtn" data-pu="off">Off</button>
+      </div>
+    </div>
   </div>
   <button class="btn" id="retryBtn">Try Again</button>
 </div>
@@ -469,7 +484,13 @@
   // ---- On-screen arrow keys (touch devices) ----
   // A keycap D-pad that drives the same keys.* state as the keyboard. Each key
   // is an independent multi-touch button, so two fingers give diagonals.
-  const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+  // Detect a genuine touch device by its PRIMARY pointer being coarse — this
+  // avoids the classic desktop-Chrome false positive where `ontouchstart`
+  // exists on a mouse/trackpad machine (e.g. a Mac), which was hiding the Mouse
+  // control option. Fall back to maxTouchPoints where matchMedia is unavailable.
+  const isTouch = window.matchMedia
+    ? window.matchMedia("(pointer: coarse)").matches
+    : (navigator.maxTouchPoints > 0);
   if (isTouch) document.body.classList.add("touch");
   // Purely cosmetic scale-ups (collision/physics are unaffected): the ship is
   // drawn bigger on phones so it's easy to see; voids are drawn a bit larger
