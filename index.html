@@ -764,7 +764,14 @@
   // a position clear of the ship (and, in easy, away from the edges), biased
   // toward the center: averaging three randoms gives a bell-ish distribution
   // that peaks in the middle, so voids cluster centrally but can still reach out.
-  function ctrand() { return (Math.random() + Math.random() + Math.random()) / 3; }
+  // 0 = uniform spread, 1 = strong center cluster. Kept low so 5+ voids don't
+  // pile up in the middle and make the game uncontrollable.
+  const VOID_CENTER_BIAS = 0.3;
+  function ctrand() {
+    const u = Math.random();
+    const c = (Math.random() + Math.random() + Math.random()) / 3;  // center-peaked
+    return u + (c - u) * VOID_CENTER_BIAS;                          // lerp uniform <-> biased
+  }
   // keep new voids from swallowing pickups the player is heading for
   function nearPowerup(x, y) {
     for (const pu of powerups) if (Math.hypot(x - pu.x, y - pu.y) < 170 * SC) return true;
