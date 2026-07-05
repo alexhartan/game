@@ -176,8 +176,7 @@
   /* segmented toggles (difficulty + control mode) */
   .diffchoice { display: inline-flex; margin-top: 22px; align-items: center; gap: 8px; }
   .puchoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
-  #ctrlChoice { display: none; margin-top: 14px; align-items: center; gap: 8px; }
-  body.touch #ctrlChoice { display: inline-flex; }
+  #ctrlChoice { display: inline-flex; margin-top: 14px; align-items: center; gap: 8px; }
   .cclabel { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: #7a86b8; margin-right: 4px; }
   .ccbtn {
     padding: 8px 16px; font-size: 13px; font-weight: 600; cursor: pointer;
@@ -373,7 +372,7 @@
   const SPAWN_INTERVAL = 10;      // seconds between new voids
   const THRUST_ACCEL = 750;       // player thrust from WASD/arrows (px/s^2)
   const MAX_SPEED = 600;          // px/s velocity clamp — tames runaway slingshots
-  const GRAV_STRENGTH = 300;      // base pull of a void (scaled per-void by its random size)
+  const GRAV_STRENGTH = 250;      // base pull of a void (scaled per-void by its random size)
   const GRAV_SCALE = 480;         // distance scale of the logarithmic falloff
   const RETURN_LIMIT = 5;         // seconds you may stay off-screen before you're lost
   // No medium drag: momentum is conserved. Only gravity and your thrust change
@@ -472,6 +471,11 @@
   // is an independent multi-touch button, so two fingers give diagonals.
   const isTouch = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
   if (isTouch) document.body.classList.add("touch");
+  // Purely cosmetic scale-ups (collision/physics are unaffected): the ship is
+  // drawn bigger on phones so it's easy to see; voids are drawn a bit larger
+  // everywhere so they read more clearly.
+  const SHIP_LOOK = isTouch ? 2 : 1;
+  const HOLE_LOOK = 1.5;
   const dpad = document.getElementById("dpad");
   // Floating joystick state (stick mode): anchored wherever the finger lands.
   const joy = { active: false, x: 0, y: 0, id: null, ox: 0, oy: 0, px: 0, py: 0 };
@@ -543,9 +547,21 @@
   }));
   applyPU();
 
-  // ---- Control mode (touch): "keys" (D-pad) or "stick" (floating joystick) ----
-  let controlMode = localStorage.getItem("etv_ctrl") || "keys";
+  // ---- Control mode. Touch: "keys" (D-pad) or "stick" (floating joystick).
+  // Desktop: "keys" (keyboard) or "mouse" (hold-click floating joystick). ----
   const ctrlChoice = document.getElementById("ctrlChoice");
+  // label the second control option for the device: Joystick on touch, Mouse on desktop
+  if (ctrlChoice) {
+    const btns = ctrlChoice.querySelectorAll(".ccbtn");
+    if (isTouch) { btns[0].textContent = "Arrow Keys"; btns[0].dataset.mode = "keys";
+                   btns[1].textContent = "Joystick";   btns[1].dataset.mode = "stick"; }
+    else        { btns[0].textContent = "Keyboard";    btns[0].dataset.mode = "keys";
+                   btns[1].textContent = "Mouse";       btns[1].dataset.mode = "mouse"; }
+  }
+  const CTRL_MODES = isTouch ? ["keys", "stick"] : ["keys", "mouse"];
+  let controlMode = localStorage.getItem("etv_ctrl") || "keys";
+  if (!CTRL_MODES.includes(controlMode)) controlMode = "keys";   // ignore a mode saved on the other device type
+  function usesStick() { return controlMode === "stick" || controlMode === "mouse"; }
   function applyCtrlMode() {
     document.body.classList.toggle("ctrl-stick", controlMode === "stick");
     if (ctrlChoice) ctrlChoice.querySelectorAll(".ccbtn").forEach((b) =>
@@ -559,8 +575,9 @@
   });
   applyCtrlMode();
 
-  // Floating joystick: touch anywhere on the playfield to anchor it, drag to steer.
-  function stickActive() { return running && controlMode === "stick"; }
+  // Floating joystick: press anywhere on the playfield (touch, or mouse on
+  // desktop) to anchor it, then drag to steer.
+  function stickActive() { return running && usesStick(); }
   window.addEventListener("pointerdown", (e) => {
     if (!stickActive() || joy.active) return;
     if (e.target && e.target.closest && e.target.closest(".overlay, #dpad, #saveRow, #slot")) return;
@@ -1093,14 +1110,6 @@
     ship.vx += gx * gmult * sdt;
     ship.vy += gy * gmult * sdt;
 
-    // soft edge repulsion: a gentle inward push that ramps up as the ship nears
-    // a border, easing it back toward the field before it ever hits the wall
-    const em = 130 * SC, epush = 1240 * SC;
-    if (ship.x < em)          ship.vx += epush * (1 - ship.x / em) * sdt;
-    else if (ship.x > W - em) ship.vx -= epush * (1 - (W - ship.x) / em) * sdt;
-    if (ship.y < em)          ship.vy += epush * (1 - ship.y / em) * sdt;
-    else if (ship.y > H - em) ship.vy -= epush * (1 - (H - ship.y) / em) * sdt;
-
     // velocity clamp: orbital speeds sit well under this, so interior play is
     // unchanged — it only caps the runaway speed a slingshot can hand you, so
     // you can't be flung off-screen faster than you can react
@@ -1271,7 +1280,7 @@
 
   // wormhole: white core, purple swirling edge
   function drawPortal(h) {
-    const R = h.core, Rg = h.reach * 0.5;
+    const R = h.core * HOLE_LOOK, Rg = h.reach * 0.5 * HOLE_LOOK;   // cosmetic-only size
     if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) return;
     ctx.save();
     ctx.globalAlpha = 0.5;
@@ -1298,8 +1307,8 @@
     const vis = isActive("nerf") ? 0.68 : 1;   // Reduced Pull: voids look smaller
     for (const h of holes) {
       if (h.portal) { drawPortal(h); continue; }
-      const R = h.core;
-      const Rg = h.reach * 0.55 * vis;
+      const R = h.core * HOLE_LOOK;               // cosmetic-only size (collision uses h.core)
+      const Rg = h.reach * 0.55 * vis * HOLE_LOOK;
       // skip voids whose glow is fully off-screen (they still pull, just unseen)
       if (h.x + Rg < 0 || h.x - Rg > W || h.y + Rg < 0 || h.y - Rg > H) continue;
       // accretion glow (cached sprite, scaled to this void)
@@ -1338,7 +1347,7 @@
     ctx.globalAlpha = blink;
     ctx.translate(ship.x, ship.y);
     ctx.rotate(ship.angle);
-    ctx.scale(SC, SC);   // draw the ship in fixed local units, scaled to viewport
+    ctx.scale(SC * SHIP_LOOK, SC * SHIP_LOOK);   // fixed local units, scaled to viewport (SHIP_LOOK = cosmetic size)
 
     // engine trail (sp is a scaled speed; convert back to local units for length)
     const sp = Math.hypot(ship.vx, ship.vy);
@@ -1379,12 +1388,13 @@
 
     // soft halo
     ctx.globalAlpha = 0.5 * blink;
-    const halo = ctx.createRadialGradient(ship.x, ship.y, 2 * SC, ship.x, ship.y, 22 * SC);
+    const hr = 22 * SC * SHIP_LOOK;
+    const halo = ctx.createRadialGradient(ship.x, ship.y, 2 * SC * SHIP_LOOK, ship.x, ship.y, hr);
     halo.addColorStop(0, "rgba(140,180,255,0.5)");
     halo.addColorStop(1, "rgba(140,180,255,0)");
     ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(ship.x, ship.y, 22 * SC, 0, Math.PI * 2);
+    ctx.arc(ship.x, ship.y, hr, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
   }
@@ -1428,7 +1438,7 @@
 
   // subtle ring + knob shown only while the floating joystick is being dragged
   function drawStick() {
-    if (!(running && controlMode === "stick" && joy.active)) return;
+    if (!(running && usesStick() && joy.active)) return;
     const R = joyR();
     let dx = joy.px - joy.ox, dy = joy.py - joy.oy;
     const d = Math.hypot(dx, dy);
@@ -1507,7 +1517,7 @@
   function drawOrb() {
     if (!active) return;
     const c = POWERUPS[active.type].color;
-    const R = 24 * SC * (1 + 0.05 * Math.sin(performance.now() / 110));
+    const R = 24 * SC * SHIP_LOOK * (1 + 0.05 * Math.sin(performance.now() / 110));
     ctx.save();
     ctx.globalAlpha = 0.16; ctx.fillStyle = c;
     ctx.beginPath(); ctx.arc(ship.x, ship.y, R, 0, Math.PI * 2); ctx.fill();
