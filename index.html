@@ -826,6 +826,9 @@ function setTimer(frac, warn){
    CPU OPPONENT (local NPC)
    ============================================================ */
 const CPU_MIN_DELAY = 700, CPU_MAX_DELAY = 1500;
+const AVG_SPEND = 5;       // coins an average player is worth (25 coins / 5 slots)
+const OVR_TO_COIN = 0.8;   // each OVR point above the position average adds ~0.8 coins
+const CPU_OVERDRAFT = 0;   // the CPU spends down to zero but won't take on debt
 
 // Queue the CPU's move whenever it becomes its turn.
 function cpuActLater(){
@@ -840,7 +843,8 @@ function cpuAct(){
   const team = G.cpuTeam;
   const { want, maxBid } = cpuValue(team, A.player, A.pos);
   if(want && A.bid < maxBid){
-    doBid(team, (maxBid - A.bid) >= 4 ? 2 : 1);   // raise toward its ceiling
+    const gap = maxBid - A.bid;                    // close the gap fast when it's big
+    doBid(team, gap>=6 ? 3 : gap>=3 ? 2 : 1);
   } else {
     doPass(team);
   }
@@ -860,23 +864,30 @@ function projFactors(team, pos, playerObj){
 function cpuValue(team, p, pos){
   const own = G.rosters[team][pos];
   const pObj = { rating:p.r, t:p.t };
-  let maxBid;
+  let value;
   if(own){
     // It already has this slot — poach only if the newcomer is a real upgrade.
+    // It can pay up: the upgrade in OVR, the fit gain, and it recoups the old
+    // player's price from the rival when it sells him.
     const upgrade = p.r - own.rating;
     const fitGain = projFactors(team, pos, pObj) - projFactors(team, pos, own);
     if(upgrade <= 0 && fitGain <= 2) return { want:false, maxBid:0 };
-    maxBid = upgrade*0.4 + Math.max(0, fitGain)*0.15;
+    value = upgrade*OVR_TO_COIN + Math.max(0, fitGain)*0.4 + (own.cost||0)*0.5;
   } else {
-    // Needs the slot — pay by how far above an average player he is, plus fit.
-    const edge = p.r - POS_AVG[pos];
+    // Needed slot. Centre on ~5 coins for an average player, then scale hard by
+    // how far above the position average he is (a superstar is worth fighting for).
+    // Fit is a modest nudge on top, capped so OVR stays the main driver.
     const fitGain = projFactors(team, pos, pObj) - projFactors(team, pos, null);
-    maxBid = 2 + edge*0.4 + Math.max(0, fitGain)*0.15;
+    value = AVG_SPEND + (p.r - POS_AVG[pos])*OVR_TO_COIN + Math.min(2, Math.max(0, fitGain)*0.15);
+    // Pace spending: bid harder when sitting on coins relative to slots still to fill,
+    // softer when nearly tapped out — so it doesn't hoard coins at the buzzer.
+    const needs = Math.max(1, POSITIONS.filter(q=>!G.rosters[team][q]).length);
+    const pace = Math.max(0.7, Math.min(2.0, (G.coins[team]/needs)/AVG_SPEND));
+    value *= pace;
   }
-  maxBid += Math.random()*2 - 1;                          // ±1 personality
-  maxBid = Math.round(maxBid);
-  const cap = Math.min(13, Math.max(1, G.coins[team] + 2)); // avoid heavy debt
-  return { want:true, maxBid: Math.max(1, Math.min(maxBid, cap)) };
+  value += Math.random()*2 - 1;                              // ±1 personality
+  const cap = G.coins[team] + CPU_OVERDRAFT;                 // will risk a little debt
+  return { want:true, maxBid: Math.max(1, Math.min(Math.round(value), cap)) };
 }
 
 /* ---------- Bid buttons ---------- */
