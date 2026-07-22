@@ -245,6 +245,16 @@
   .result-sub { color: var(--muted); margin-top:6px; }
 
   .foot { text-align:center; color: var(--dim); font-size:12px; margin-top: 26px; }
+
+  /* ---------- Mode selector ---------- */
+  .mode-row { display:flex; gap:10px; margin-bottom:16px; }
+  .mode-btn {
+    flex:1; padding:12px; font-size:15px; font-weight:800; cursor:pointer;
+    color:var(--muted); background:#0c1120; border:1px solid var(--line); border-radius:12px;
+    transition: all .15s;
+  }
+  .mode-btn.active { color:var(--ink); border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; background:rgba(255,209,92,.08); }
+  .bidder.cpu .who::after { content:" 🤖"; }
 </style>
 </head>
 <body>
@@ -259,13 +269,17 @@
     </div>
 
     <div class="card">
+      <div class="mode-row">
+        <button class="mode-btn active" data-mode="hotseat">👥 2 Players</button>
+        <button class="mode-btn" data-mode="cpu">🤖 vs CPU</button>
+      </div>
       <div class="names">
         <div class="name-field p1">
           <label>Player 1</label>
           <input id="name1" class="p1" type="text" maxlength="14" placeholder="Player 1" />
         </div>
         <div class="name-field p2">
-          <label>Player 2</label>
+          <label id="lbl2">Player 2</label>
           <input id="name2" class="p2" type="text" maxlength="14" placeholder="Player 2" />
         </div>
       </div>
@@ -290,7 +304,7 @@
     <div class="center" style="margin-top:22px;">
       <button id="startBtn" class="btn big">Tip Off →</button>
     </div>
-    <div class="foot">Best played on one shared screen — two rivals, one device.</div>
+    <div class="foot">Grab a friend for hotseat, or take on the CPU solo.</div>
   </section>
 
   <!-- ======================= DRAFT ======================= -->
@@ -516,7 +530,11 @@ let G = null;   // whole-game state
 let reel = null; // reel animation state
 let A = null;    // current auction state
 
-function newGame(name1, name2){
+// Average OVR per position — the CPU uses it to judge how good a player is.
+const POS_AVG = {};
+POSITIONS.forEach(pos => POS_AVG[pos] = DB[pos].reduce((s,p)=>s+p.r,0)/DB[pos].length);
+
+function newGame(name1, name2, vsCPU){
   // 10 tickets = 2 slots per position, order shuffled. Each ticket is one net
   // roster fill; a ticket's player is drawn fresh at reveal time so a no-bid
   // player can be discarded and re-drawn without disturbing the schedule.
@@ -530,7 +548,7 @@ function newGame(name1, name2){
   POSITIONS.forEach(pos => decks[pos] = shuffle(DB[pos].slice()));
 
   return {
-    names: [ name1 || "Player 1", name2 || "Player 2" ],
+    names: [ name1 || "Player 1", name2 || (vsCPU ? "CPU" : "Player 2") ],
     coins: [ START_COINS, START_COINS ],
     rosters: [ blankRoster(), blankRoster() ],
     tickets, decks,
@@ -538,6 +556,9 @@ function newGame(name1, name2){
     current: null,      // the player currently on the reel / up for auction
     discards: 0,        // no-bid discards on the current ticket (safety bound)
     stopper: 0,         // whose turn to hit STOP (alternates each ticket)
+    vsCPU: !!vsCPU,     // is player 2 an NPC?
+    cpuTeam: 1,         // the CPU is always team 1
+    cpuTimer: null,     // pending CPU action timeout
   };
 }
 
@@ -560,8 +581,20 @@ function showScreen(id){
 /* ============================================================
    START
    ============================================================ */
+let startVsCPU = false;
+document.querySelectorAll('.mode-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    startVsCPU = btn.dataset.mode === 'cpu';
+    $("lbl2").textContent = startVsCPU ? "CPU" : "Player 2";
+    $("name2").value = startVsCPU ? "CPU" : "";
+    $("name2").disabled = startVsCPU;
+  });
+});
+
 $("startBtn").addEventListener('click', ()=>{
-  G = newGame($("name1").value.trim(), $("name2").value.trim());
+  G = newGame($("name1").value.trim(), $("name2").value.trim(), startVsCPU);
   showScreen('screen-draft');
   renderScoreboard();
   renderRosters('rostersDraft');
@@ -572,6 +605,7 @@ $("startBtn").addEventListener('click', ()=>{
    ROUND — reel + stop
    ============================================================ */
 function beginRound(){
+  clearTimeout(G.cpuTimer);
   const pos = G.tickets[G.roundIdx];
   G.current = drawPlayer(pos);           // fresh player for this reveal
   $("roundPill").textContent = `Round ${G.roundIdx+1} / ${G.tickets.length}`;
@@ -584,12 +618,15 @@ function beginRound(){
   renderScoreboard();
   $("chip1").classList.toggle('turn', G.stopper===0);
   $("chip2").classList.toggle('turn', G.stopper===1);
-  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> hits STOP`;
+  const cpuStops = G.vsCPU && G.stopper===G.cpuTeam;
+  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> ${cpuStops?'is stopping…':'hits STOP'}`;
 
   const btn = $("stopBtn");
-  btn.disabled = false;
+  btn.disabled = cpuStops;               // the human can't stop for the CPU
   btn.textContent = "STOP";
   startReel(pos);
+
+  if(cpuStops) G.cpuTimer = setTimeout(stopReel, 800 + Math.random()*700);
 }
 
 const ITEM_H = 44, FRAME_H = 128;
@@ -631,7 +668,7 @@ function reelSpin(){
   reel.raf = requestAnimationFrame(reelSpin);
 }
 
-$("stopBtn").addEventListener('click', ()=>{
+function stopReel(){
   if(!reel || reel.phase !== "spin") return;
   $("stopBtn").disabled = true;
   $("stopBtn").textContent = "…";
@@ -639,7 +676,8 @@ $("stopBtn").addEventListener('click', ()=>{
   cancelAnimationFrame(reel.raf);
   reel.phase = "land";
   landReel();
-});
+}
+$("stopBtn").addEventListener('click', stopReel);
 
 // Roll a slow, satisfying distance and land exactly on this round's player.
 function landReel(){
@@ -727,6 +765,7 @@ function startAuction(player, pos){
   $("bal2").textContent = G.coins[1];
   setStatus(0,"",""); setStatus(1,"","");
   $("bidder1").classList.remove('lead','act'); $("bidder2").classList.remove('lead','act');
+  $("bidder2").classList.toggle('cpu', G.vsCPU);
   $("bidAmt").innerHTML = `0<small> coins</small>`;
   $("bidLeader").textContent = "No bids yet";
   $("bidLeader").className = "leader";
@@ -764,7 +803,9 @@ function setTurnUI(){
   else if(A.passed[o])    setStatus(o, "passed", "Passed");
   else                    setStatus(o, "locked", `Waiting for ${G.names[t]}…`);
 
+  if(G.vsCPU && t===G.cpuTeam && !A.settled) setStatus(t, "", "Thinking…");
   updateBidButtons();
+  cpuActLater();   // if it's now the CPU's turn, queue its move
 }
 
 function auctionTick(){
@@ -781,11 +822,69 @@ function setTimer(frac, warn){
   bar.classList.toggle('warn', !!warn);
 }
 
+/* ============================================================
+   CPU OPPONENT (local NPC)
+   ============================================================ */
+const CPU_MIN_DELAY = 700, CPU_MAX_DELAY = 1500;
+
+// Queue the CPU's move whenever it becomes its turn.
+function cpuActLater(){
+  if(!G || !G.vsCPU) return;
+  clearTimeout(G.cpuTimer);
+  if(!A || A.settled || A.turn !== G.cpuTeam || A.passed[G.cpuTeam]) return;
+  G.cpuTimer = setTimeout(cpuAct, CPU_MIN_DELAY + Math.random()*(CPU_MAX_DELAY-CPU_MIN_DELAY));
+}
+
+function cpuAct(){
+  if(!A || A.settled || A.turn !== G.cpuTeam || A.passed[G.cpuTeam]) return;
+  const team = G.cpuTeam;
+  const { want, maxBid } = cpuValue(team, A.player, A.pos);
+  if(want && A.bid < maxBid){
+    doBid(team, (maxBid - A.bid) >= 4 ? 2 : 1);   // raise toward its ceiling
+  } else {
+    doPass(team);
+  }
+}
+
+// Sum of the four fit factors if `playerObj` (or null) sat at pos — lets the CPU
+// judge how much a player helps its chemistry.
+function projFactors(team, pos, playerObj){
+  const saved = G.rosters[team][pos];
+  G.rosters[team][pos] = playerObj;
+  const f = factorsOf(team);
+  G.rosters[team][pos] = saved;
+  return f.spacing + f.defense + f.creation + f.chemistry;
+}
+
+// Coins the CPU is willing to pay for the player up for auction.
+function cpuValue(team, p, pos){
+  const own = G.rosters[team][pos];
+  const pObj = { rating:p.r, t:p.t };
+  let maxBid;
+  if(own){
+    // It already has this slot — poach only if the newcomer is a real upgrade.
+    const upgrade = p.r - own.rating;
+    const fitGain = projFactors(team, pos, pObj) - projFactors(team, pos, own);
+    if(upgrade <= 0 && fitGain <= 2) return { want:false, maxBid:0 };
+    maxBid = upgrade*0.4 + Math.max(0, fitGain)*0.15;
+  } else {
+    // Needs the slot — pay by how far above an average player he is, plus fit.
+    const edge = p.r - POS_AVG[pos];
+    const fitGain = projFactors(team, pos, pObj) - projFactors(team, pos, null);
+    maxBid = 2 + edge*0.4 + Math.max(0, fitGain)*0.15;
+  }
+  maxBid += Math.random()*2 - 1;                          // ±1 personality
+  maxBid = Math.round(maxBid);
+  const cap = Math.min(13, Math.max(1, G.coins[team] + 2)); // avoid heavy debt
+  return { want:true, maxBid: Math.max(1, Math.min(maxBid, cap)) };
+}
+
 /* ---------- Bid buttons ---------- */
 document.querySelectorAll('.bid-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     if(!A || A.settled) return;
     const team = +btn.dataset.team;
+    if(G.vsCPU && team===G.cpuTeam) return; // the CPU plays itself
     if(btn.dataset.pass){ doPass(team); return; }
     doBid(team, +btn.dataset.inc);
   });
@@ -1080,8 +1179,8 @@ function endGame(){
 }
 
 $("againBtn").addEventListener('click', ()=>{
-  const n1 = G.names[0], n2 = G.names[1];
-  G = newGame(n1, n2);
+  const n1 = G.names[0], n2 = G.names[1], vs = G.vsCPU;
+  G = newGame(n1, n2, vs);
   showScreen('screen-draft');
   renderScoreboard();
   renderRosters('rostersDraft');
