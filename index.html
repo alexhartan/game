@@ -60,6 +60,15 @@
   .rules b { color: var(--ink); }
   .rules ul { margin: 8px 0 0 18px; }
   .rules li { margin: 4px 0; }
+  .rules-head { display:flex; align-items:center; justify-content:space-between; }
+  .rules-head b { color: var(--ink); font-size:15px; }
+  .info-btn {
+    width:24px; height:24px; flex:0 0 auto; border-radius:50%; cursor:pointer;
+    font-family: Georgia, 'Times New Roman', serif; font-style:italic; font-weight:700; font-size:14px;
+    color: var(--gold); background:transparent; border:1.5px solid var(--gold); line-height:1;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  .info-btn:hover { background: rgba(255,209,92,.12); }
 
   .names { display:flex; gap: 14px; flex-wrap: wrap; margin-top: 4px; }
   .name-field { flex: 1 1 200px; }
@@ -208,10 +217,11 @@
     display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:10px;
     background:#0a0e1c; border:1px solid transparent; margin-bottom:7px; font-size:14px;
   }
-  .slot .pp { font-size:11px; font-weight:900; color: var(--gold); width:26px; }
-  .slot .nn { font-weight:700; flex:1; }
-  .slot .rr { color: var(--good); font-weight:800; font-size:13px; }
-  .slot .cost { color: var(--muted); font-size:12px; width:34px; text-align:right; }
+  .slot .pp { font-size:11px; font-weight:900; color: var(--gold); width:24px; flex:0 0 auto; }
+  .slot .nn { font-weight:700; flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .slot .chips { flex:0 0 auto; display:flex; gap:3px; }
+  .slot .rr { color: var(--good); font-weight:800; font-size:13px; flex:0 0 auto; }
+  .slot .cost { color: var(--muted); font-size:12px; width:30px; text-align:right; flex:0 0 auto; }
   .slot.empty .nn { color: var(--dim); font-weight:500; font-style: italic; }
   .slot.hot { border-color: var(--gold); animation: hot .8s ease; }
   @keyframes hot { from { background: rgba(255,209,92,.25);} to {background:#0a0e1c;} }
@@ -230,12 +240,12 @@
   .reel-caption .tchip { font-size:10px; }
 
   /* ---------- Team fit bars ---------- */
-  .fitrow { display:flex; align-items:center; gap:6px; margin:2px 0 10px; }
-  .fitbar { flex:1; display:flex; align-items:center; gap:4px; }
-  .fitlbl { font-size:9px; font-weight:800; color:var(--dim); width:24px; letter-spacing:.02em; }
-  .fitmeter { flex:1; height:5px; border-radius:999px; background:#0a0e1c; overflow:hidden; border:1px solid var(--line); }
+  .fitrow { display:flex; align-items:flex-end; gap:9px; margin:4px 0 12px; }
+  .fitbar { flex:1; display:flex; flex-direction:column; gap:4px; }
+  .fitlbl { font-size:9px; font-weight:800; color:var(--dim); letter-spacing:.05em; text-align:center; }
+  .fitmeter { height:6px; border-radius:999px; background:#0a0e1c; overflow:hidden; border:1px solid var(--line); }
   .fitmeter i { display:block; height:100%; border-radius:999px; background:linear-gradient(90deg,var(--good),var(--gold)); transition:width .3s ease; }
-  .fitmult { font-size:12px; font-weight:900; color:var(--gold); margin-left:2px; }
+  .fitmult { font-size:13px; font-weight:900; color:var(--gold); flex:0 0 auto; }
 
   /* ---------- Results ---------- */
   .result-head { text-align:center; margin: 8px 0 4px; }
@@ -255,6 +265,37 @@
   }
   .mode-btn.active { color:var(--ink); border-color:var(--gold); box-shadow:0 0 0 1px var(--gold) inset; background:rgba(255,209,92,.08); }
   .bidder.cpu .who::after { content:" 🤖"; }
+
+  /* ---------- Modal ---------- */
+  .modal-overlay {
+    position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center;
+    padding:20px; background:rgba(4,6,12,.72); backdrop-filter:blur(3px);
+  }
+  .modal-overlay[hidden] { display:none; }
+  .modal-box {
+    position:relative; width:100%; max-width:520px; max-height:82vh; overflow-y:auto;
+    background:var(--panel,#0c1120); border:1px solid var(--line); border-radius:18px;
+    padding:22px 22px 24px; box-shadow:0 30px 80px rgba(0,0,0,.6);
+  }
+  .modal-x {
+    position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:50%;
+    background:#1a2138; border:1px solid var(--line); color:var(--muted); font-size:14px; cursor:pointer;
+  }
+  .modal-x:hover { color:var(--ink); }
+  .modal-body h2 { font-size:18px; margin:0 26px 10px 0; }
+  .modal-body ul { margin:0 0 0 18px; color:var(--muted); font-size:14px; line-height:1.65; }
+  .modal-body li { margin:7px 0; }
+  .modal-body b { color:var(--ink); }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 560px) {
+    .rosters { grid-template-columns: 1fr; gap:10px; margin-top:14px; }
+    .bid-btn { min-width:40px; padding:12px 4px; font-size:16px; }
+    .bidder { padding:12px 10px; }
+    .pos-banner { margin-top:12px; }
+    .roster { padding:12px; }
+    .slot { padding:7px 9px; margin-bottom:5px; }
+  }
 </style>
 </head>
 <body>
@@ -286,17 +327,25 @@
     </div>
 
     <div class="card rules">
-      <b>How it works</b>
+      <div class="rules-head"><b>How to play</b><button class="info-btn" id="rulesInfo" aria-label="Full rules &amp; scoring">i</button></div>
       <ul>
-        <li>Each of you starts with <b style="color:var(--gold)">25 coins</b> and an empty roster: <b>PG · SG · SF · PF · C</b>.</li>
-        <li>Every round the reel cycles well-known All-Stars for one position. The designated player hits <b>STOP</b> — it slows and lands on a name.</li>
-        <li>An <b>auction</b> opens. Bidding <b>alternates</b>: the stopper opens, then each bid hands the turn straight to the rival and resets the clock. Let the clock run out on your turn and you pass.</li>
-        <li>Pass while a bid stands and you concede — the last bidder wins, pays the coins, and locks the player into that slot.</li>
-        <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the same slot.</li>
-        <li><b>Poach & upgrade:</b> already own that position? Bid anyway — win and you hold <b>both</b> players. Keep one; the other is <b>sold</b> to your rival (who needs the slot) for the price it was originally won at — even if it forces them into the red. Keep the star, or sell it to drain their coins.</li>
-        <li>Both rosters fill 1 of each position across <b>10 slots</b>. You can <b>bid past your coins</b> and go into debt to land a player.</li>
-        <li>Once you <b>pass</b>, you're out of that auction — no coming back in.</li>
-        <li><b>Team fit (chemistry):</b> a balanced roster scores more. Four factors — <b>Spacing</b> (3P), <b>Defense</b> (RIM/DEF), <b>Creation</b> (CRT/ISO), and <b>Chemistry</b> (covering all of it) — each rate your five players and together boost skill by up to <b>+25%</b>. Draft for fit, not just OVR.</li>
+        <li>Build a roster — <b>PG · SG · SF · PF · C</b> — with <b style="color:var(--gold)">25 coins</b>.</li>
+        <li>Each round the reel lands on a legend; <b>out-bid</b> your rival to sign them.</li>
+        <li>Highest <b>team score</b> wins — talent, chemistry and leftover coins. Tap <b>i</b> for the full rules.</li>
+      </ul>
+    </div>
+
+    <div id="rulesFull" hidden>
+      <h2>How it works</h2>
+      <ul>
+        <li>Each player starts with <b style="color:var(--gold)">25 coins</b> and an empty roster: <b>PG · SG · SF · PF · C</b>.</li>
+        <li>Every round the reel spins through legends at one position and lands on one.</li>
+        <li>An <b>auction</b> opens. Bidding <b>alternates</b> — one player opens, then each bid hands the turn to the rival and resets the clock. Let the clock run out on your turn and you pass.</li>
+        <li>Pass while a bid stands and you concede — the top bidder signs the player. <b>Once you pass, you're out</b> of that auction.</li>
+        <li>If <b>nobody bids</b>, that player goes undrafted and the reel spins up a <b>new</b> one for the slot.</li>
+        <li>You can <b>bid past your coins</b> and go into debt to land a player.</li>
+        <li><b>Poach:</b> already own that position? Bid anyway — win and you <b>keep the new player</b>; your old one is <b>sold</b> to your rival (who needs the slot) at its original price, even if it puts them in the red.</li>
+        <li><b>Team fit (chemistry):</b> <b>Spacing</b> (3P), <b>Defense</b> (RIM/DEF), <b>Creation</b> (CRT/ISO) and <b>Chemistry</b> (covering all of it) rate your five players and boost skill by up to <b>+25%</b>. Draft for fit, not just OVR.</li>
         <li><b>Final = skill × fit + coins</b> (each reserve coin <b style="color:var(--good)">+2</b>, each debt coin <b style="color:var(--bad)">−4</b>), then an <b>X-Factor</b> roll (random <b>±3%</b>) so the underdog always has a puncher's chance.</li>
       </ul>
     </div>
@@ -318,7 +367,6 @@
     </div>
 
     <div class="pos-banner">
-      <div class="lbl">This round's position</div>
       <div class="pos" id="posBanner">—</div>
     </div>
 
@@ -327,12 +375,6 @@
       <div class="reel-track" id="reelTrack"></div>
     </div>
     <div class="reel-caption" id="reelCaption"></div>
-
-    <!-- STOP phase -->
-    <div id="stopPhase" class="center" style="margin-top:18px;">
-      <div class="phase-note" id="stopNote">Get ready…</div>
-      <button id="stopBtn" class="btn stop big" style="margin-top:10px;">STOP</button>
-    </div>
 
     <!-- Auction phase (the selected player is highlighted in the reel above) -->
     <div id="revealPhase" style="display:none;">
@@ -393,6 +435,14 @@
     </div>
     <div class="foot">Ratings reflect peak star power — a little opinion baked in. Built for bragging rights.</div>
   </section>
+
+  <!-- ======================= MODAL ======================= -->
+  <div class="modal-overlay" id="modal" hidden>
+    <div class="modal-box">
+      <button class="modal-x" id="modalClose" aria-label="Close">✕</button>
+      <div class="modal-body" id="modalBody"></div>
+    </div>
+  </div>
 
 </div>
 
@@ -578,6 +628,14 @@ function showScreen(id){
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
+/* ---------- Modal (info popups) ---------- */
+function openModal(html){ $("modalBody").innerHTML = html; $("modal").hidden = false; }
+function closeModal(){ $("modal").hidden = true; }
+$("modalClose").addEventListener('click', closeModal);
+$("modal").addEventListener('click', e=>{ if(e.target.id === 'modal') closeModal(); });
+document.addEventListener('keydown', e=>{ if(e.key === 'Escape' && !$("modal").hidden) closeModal(); });
+$("rulesInfo").addEventListener('click', ()=> openModal($("rulesFull").innerHTML));
+
 /* ============================================================
    START
    ============================================================ */
@@ -610,7 +668,6 @@ function beginRound(){
   G.current = drawPlayer(pos);           // fresh player for this reveal
   $("roundPill").textContent = `Round ${G.roundIdx+1} / ${G.tickets.length}`;
   $("posBanner").textContent = pos + " — " + POS_NAMES[pos];
-  $("stopPhase").style.display = "";
   $("revealPhase").style.display = "none";
   $("nextWrap").style.display = "none";
   $("auction").style.display = "";
@@ -618,15 +675,9 @@ function beginRound(){
   renderScoreboard();
   $("chip1").classList.toggle('turn', G.stopper===0);
   $("chip2").classList.toggle('turn', G.stopper===1);
-  const cpuStops = G.vsCPU && G.stopper===G.cpuTeam;
-  $("stopNote").innerHTML = `Position: <b style="color:var(--gold)">${POS_NAMES[pos]}</b> &middot; <b style="color:${G.stopper===0?'var(--p1)':'var(--p2)'}">${G.names[G.stopper]}</b> ${cpuStops?'is stopping…':'hits STOP'}`;
 
-  const btn = $("stopBtn");
-  btn.disabled = cpuStops;               // the human can't stop for the CPU
-  btn.textContent = "STOP";
   startReel(pos);
-
-  if(cpuStops) G.cpuTimer = setTimeout(stopReel, 800 + Math.random()*700);
+  G.cpuTimer = setTimeout(stopReel, 1000);   // reel stops itself after ~1s
 }
 
 const ITEM_H = 44, FRAME_H = 128;
@@ -670,14 +721,10 @@ function reelSpin(){
 
 function stopReel(){
   if(!reel || reel.phase !== "spin") return;
-  $("stopBtn").disabled = true;
-  $("stopBtn").textContent = "…";
-  $("stopNote").textContent = "Locking it in…";
   cancelAnimationFrame(reel.raf);
   reel.phase = "land";
   landReel();
 }
-$("stopBtn").addEventListener('click', stopReel);
 
 // Roll a slow, satisfying distance and land exactly on this round's player.
 function landReel(){
@@ -726,7 +773,6 @@ function onReelLanded(){
   cap.innerHTML = `<b>${p.n}</b> — ${starWord(p.r)} · ${POS_NAMES[pos]} ${traitChips(p.t)}`;
   cap.classList.add('show');
 
-  $("stopPhase").style.display = "none";
   $("revealPhase").style.display = "";
   startAuction(p, pos);
 }
@@ -1140,7 +1186,7 @@ function renderRosters(containerId, hotTeam, hotPos){
       const slot = G.rosters[t][pos];
       const hot = (pos===hotPos && (t===hotTeam || hotTeam===-2)) ? " hot" : ""; // -2 = both teams (poach)
       if(slot){
-        return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name} ${traitChips(slot.t)}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
+        return `<div class="slot${hot}"><span class="pp">${pos}</span><span class="nn">${slot.name}</span><span class="chips">${traitChips(slot.t)}</span><span class="rr">${slot.rating}</span><span class="cost">${slot.cost}c</span></div>`;
       }
       return `<div class="slot empty"><span class="pp">${pos}</span><span class="nn">— empty —</span></div>`;
     }).join('');
