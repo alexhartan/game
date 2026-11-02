@@ -25,9 +25,10 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <p id="level" class="font-display text-sm tracking-wider sm:text-base">LEVEL 1</p>
 <p id="timer" class="font-display text-4xl tabular-nums sm:text-5xl">0:30</p>
 </footer>
+<div class="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3 sm:bottom-10"><div class="grid h-14 w-14 place-items-center rounded-md border border-sky/30 bg-deep/80"><span id="slotIcon" hidden class="h-6 w-6 rounded-full bg-[#FF4FA3]"></span></div><p id="slotName" class="font-display text-xs uppercase tracking-wider text-sky">No power-up</p></div>
 <section id="panel" class="absolute left-1/2 top-1/2 w-[calc(100%-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky/20 bg-deep/90 p-8 backdrop-blur-sm">
 <h1 id="panelTitle" class="font-display text-2xl leading-tight [text-wrap:balance] sm:text-3xl">Close the gap</h1>
-<p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Pull your mouse away from the plane to steer it. The further you pull, up to a limit, the faster it moves. Thread it through the gaps. Each level lasts 30 seconds, and the bars speed up as you go. Press Esc to pause.</p>
+<p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Pull your mouse away from the plane to steer it. The further you pull, up to a limit, the faster it moves. Thread it through the gaps, grab a pink orb, then click to blast. Each level lasts 30 seconds, and the bars speed up as you go. Press Esc to pause.</p>
 <div class="mt-8 flex flex-wrap gap-3"><button id="startBtn" type="button" class="rounded-md bg-gold px-6 py-3 font-display text-sm uppercase tracking-wider text-deep transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-deep">Start flying</button><button id="tuneBtn" type="button" title="Press T" aria-controls="tune" aria-expanded="false" class="rounded-md border border-sky/30 px-6 py-3 font-display text-sm uppercase tracking-wider text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Tune</button></div>
 </section>
 <form id="tune" hidden class="absolute bottom-24 right-6 w-72 max-w-[calc(100%-48px)] cursor-auto rounded-md border border-sky/20 bg-deep/90 p-5 backdrop-blur-sm sm:bottom-28 sm:right-10">
@@ -46,28 +47,30 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 </main>
 <script>
 const stage=document.getElementById('stage'),cv=document.getElementById('sky'),cx=cv.getContext('2d');
-const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn')};
+const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),slotIcon:document.getElementById('slotIcon'),slotName:document.getElementById('slotName')};
 const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,god:true};
 const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
-let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now();
+let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],held=null;
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
 const speed=()=>W*.33*cfg.speed*boost;
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`};
 function sizes(){P.L=clamp(Math.min(W*.15,H*.24),72,240)*.85*eff('plane');BW=clamp(W*.015,14,30)*.8*eff('bars')}
-function resize(){const oW=W,oH=H,dpr=Math.min(devicePixelRatio||1,2),r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;cx.setTransform(dpr,0,0,dpr,0,0);sizes();if(!oW){P.tx=W*.3;P.y=P.ty=H*.45;const B=bounds();P.x=B.minX+(B.maxX-B.minX)*.3;build(W*.62);return}const sx=W/oW,sy=H/oH;bars.forEach(b=>{b.x*=sx;b.y0*=sy;b.y1*=sy});nextX*=sx;P.x*=sx;P.y*=sy;P.tx*=sx;P.ty*=sy}
+function resize(){const oW=W,oH=H,dpr=Math.min(devicePixelRatio||1,2),r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*dpr;cv.height=H*dpr;cx.setTransform(dpr,0,0,dpr,0,0);sizes();if(!oW){P.tx=W*.3;P.y=P.ty=H*.45;const B=bounds();P.x=B.minX+(B.maxX-B.minX)*.3;build(W*.62);return}const sx=W/oW,sy=H/oH;bars.forEach(b=>{b.x*=sx;b.y0*=sy;b.y1*=sy});orbs.forEach(o=>{o.x*=sx;o.y*=sy});nextX*=sx;P.x*=sx;P.y*=sy;P.tx*=sx;P.ty*=sy}
 function spawn(x){const kind=Math.random()<.3?'pair':(prev==='top'?'bottom':'top');prev=kind;const open=()=>H*rand(.4,.6);
 if(kind==='top')bars.push({x,y0:0,y1:H-open()});else if(kind==='bottom')bars.push({x,y0:open(),y1:H});
 else{const g=H*Math.max(.26,.36-.015*(level-1)),m=rand(g/2+H*.1,H-g/2-H*.1);bars.push({x,y0:0,y1:m-g/2},{x,y0:m+g/2,y1:H})}}
-function fill(){while(nextX<W+BW){spawn(nextX);nextX+=Math.max(200,W*rand(.3,.42))*2.5*eff('course')}}
-function build(x){bars=[];nextX=x;fill()}
-function respace(r){const a=P.x+P.L;bars.forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
+function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY)})}nextX+=st}}
+function build(x){bars=[];orbs=[];nextX=x;fill()}
+function respace(r){const a=P.x+P.L;[...bars,...orbs].forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
+function setSlot(){ui.slotIcon.hidden=!held;ui.slotName.textContent=held?'Blast: click to fire':'No power-up'}
+function fire(){if(state!=='play'||!held)return;const c=Math.cos(P.a),s=Math.sin(P.a),n=.5*.85*P.L;shots.push({x:P.x+n*c,y:P.y+n*s});held=null;setSlot()}
 function setLives(){ui.lives.forEach((li,i)=>{li.classList.toggle('text-gold',i<lives);li.classList.toggle('text-charcoal',i>=lives)})}
 function setLevel(){ui.level.textContent=`LEVEL ${level}`}
-function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
+function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;held=null;shots=[];fx=[];setSlot();setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
 function over(){state='over';stage.classList.remove('cursor-none');ui.title.textContent=`Grounded on level ${level}`;ui.text.textContent=`You flew for ${fmt(flown)}. Three hits and the flight is over.`;ui.btn.textContent='Fly again';ui.panel.hidden=false;ui.btn.focus()}
 function pause(){state='paused';stage.classList.remove('cursor-none');ui.title.textContent='Paused';ui.text.textContent='Press Esc or Resume to keep flying.';ui.btn.textContent='Resume';ui.panel.hidden=false}
 function resume(){state='play';ui.panel.hidden=true;stage.classList.add('cursor-none')}
@@ -86,12 +89,15 @@ ui.fs.addEventListener('click',toggleFs);
 document.addEventListener('fullscreenchange',()=>{ui.fs.setAttribute('aria-label',document.fullscreenElement?'Exit fullscreen':'Fullscreen');if(!document.fullscreenElement&&state==='play')pause()});
 [ui.tune,ui.tuneBtn,ui.fs].forEach(el=>el.addEventListener('pointermove',e=>e.stopPropagation()));
 stage.addEventListener('pointermove',aim);stage.addEventListener('pointerdown',e=>{if(!e.target.closest('#tune,#tuneBtn,#fsBtn'))aim(e)});
+stage.addEventListener('pointerdown',e=>{if(e.button===0&&!e.target.closest('#tune,#fsBtn'))fire()});
 ui.btn.addEventListener('click',()=>state==='paused'?resume():start());
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')pause()});
 addEventListener('keydown',e=>{if(e.key==='t'||e.key==='T')toggleTune();else if(e.key==='f'||e.key==='F')toggleFs();else if(e.key==='Escape'){if(state==='play')pause();else if(state==='paused')resume()}else if(e.key==='Enter'&&state!=='play'&&!e.target.closest('button,#tune'))state==='paused'?resume():start()});
 addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
+function powerups(dt){if(!held){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.26,i=orbs.findIndex(o=>SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){orbs.splice(i,1);held='blast';setSlot()}}
+const hh=P.L*.07;shots.forEach(s=>{const px=s.x;s.x+=W*1.4*dt;bars=bars.filter(b=>{const ok=b.x<=s.x&&b.x+BW>=px&&b.y0<=s.y+hh&&b.y1>=s.y-hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})});shots=shots.filter(s=>s.x<W+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
 const pu=pull(),tx=clamp(P.x+pu.x*GAIN,B.minX,B.maxX),ty=clamp(P.y+pu.y*GAIN,B.minY,B.maxY);
@@ -100,20 +106,21 @@ if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY),lean=clamp(-P.vy/(H*.6),-1,1);
 P.lift+=((pos+lean)/2-P.lift)*(1-Math.exp(-dt/.15));P.a=-P.lift*.09;
 if(state!=='play')return;
-const d=speed()*dt;bars.forEach(b=>b.x-=d);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
+const d=speed()*dt;bars.forEach(b=>b.x-=d);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
 flown+=dt;left-=dt;boost=Math.min(boost*Math.pow(1.008,cfg.accel*dt),4);if(left<=0){level++;left=LEVEL_TIME;setLevel()}
-if(inv>0)inv-=dt;else if(hit()){inv=cfg.god?.6:1.6;if(!cfg.god){lives--;setLives();if(!lives)over()}}}
+powerups(dt);if(inv>0)inv-=dt;else if(hit()){inv=cfg.god?.6:1.6;if(!cfg.god){lives--;setLives();if(!lives)over()}}}
 function plane(){cx.save();cx.translate(P.x,P.y);cx.rotate(P.a);cx.scale(P.L,P.L);cx.globalAlpha=inv>0&&state==='play'&&Math.floor(inv*10)%2?.35:1;
 const poly=(pts,f)=>{cx.beginPath();pts.forEach(([x,y],i)=>i?cx.lineTo(x,y):cx.moveTo(x,y));cx.closePath();cx.fillStyle=f;cx.fill()};
 poly([[.5,0],[-.18,.1+.02*P.lift],[-.27,.27+.06*P.lift]],'#BFDDEE');
 poly([[.5,0],[-.2,-.02],[-.5,.17],[-.18,.1+.02*P.lift]],'#FFFFFF');
 poly([[.5,0],[-.36,-.2],[-.2,-.02]],'#E3F0F8');
 cx.beginPath();cx.moveTo(.5,0);cx.lineTo(-.2,-.02);cx.moveTo(.5,0);cx.lineTo(-.18,.1+.02*P.lift);cx.strokeStyle='rgba(154,204,229,.8)';cx.lineWidth=1.2/P.L;cx.stroke();cx.restore()}
-function guide(){const p=pull(),d=Math.hypot(p.x,p.y);if(d<4)return;const h=Math.min(32,d);cx.save();cx.translate(P.x,P.y);cx.rotate(Math.atan2(p.y,p.x));cx.fillStyle='rgba(255,212,0,.4)';cx.beginPath();cx.moveTo(0,-7);cx.lineTo(d-h,-7);cx.lineTo(d-h,-20);cx.lineTo(d,0);cx.lineTo(d-h,20);cx.lineTo(d-h,7);cx.lineTo(0,7);cx.closePath();cx.fill();cx.restore()}
-function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));if(state==='play')guide();plane()}
+function props(){const r=P.L*.2,hh=P.L*.07,len=P.L*.9;orbs.forEach(o=>{cx.fillStyle='#FF4FA3';cx.beginPath();cx.arc(o.x,o.y,r,0,7);cx.fill();cx.fillStyle='rgba(255,255,255,.55)';cx.beginPath();cx.arc(o.x-r*.3,o.y-r*.3,r*.28,0,7);cx.fill()});shots.forEach(s=>{const g=cx.createLinearGradient(s.x-len,0,s.x,0);g.addColorStop(0,'rgba(255,79,163,0)');g.addColorStop(1,'#FF4FA3');cx.fillStyle=g;cx.fillRect(s.x-len,s.y-hh,len,hh*2)});cx.lineWidth=3;fx.forEach(f=>{const k=f.t/.4;cx.strokeStyle=`rgba(255,79,163,${1-k})`;cx.beginPath();cx.arc(f.x,f.y,P.L*(.1+.4*k),0,7);cx.stroke()})}
+function guide(){const p=pull(),d=Math.hypot(p.x,p.y);if(d<4)return;const h=Math.min(32,d);cx.save();cx.translate(P.x,P.y);cx.rotate(Math.atan2(p.y,p.x));cx.fillStyle='rgba(255,255,255,.2)';cx.beginPath();cx.moveTo(0,-7);cx.lineTo(d-h,-7);cx.lineTo(d-h,-20);cx.lineTo(d,0);cx.lineTo(d-h,20);cx.lineTo(d-h,7);cx.lineTo(0,7);cx.closePath();cx.fill();cx.restore()}
+function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));props();if(state==='play')guide();plane()}
 let shown='',shownNow='';
 function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}requestAnimationFrame(frame)}
-syncTune();resize();setLives();requestAnimationFrame(frame);
+syncTune();resize();setLives();setSlot();requestAnimationFrame(frame);
 </script>
 
 </body></html>
