@@ -109,7 +109,7 @@ poly([[.5,0],[-.18,.1+.02*P.lift],[-.27,.27+.06*P.lift]],'#BFDDEE');
 poly([[.5,0],[-.2,-.02],[-.5,.17],[-.18,.1+.02*P.lift]],'#FFFFFF');
 poly([[.5,0],[-.36,-.2],[-.2,-.02]],'#E3F0F8');
 cx.beginPath();cx.moveTo(.5,0);cx.lineTo(-.2,-.02);cx.moveTo(.5,0);cx.lineTo(-.18,.1+.02*P.lift);cx.strokeStyle='rgba(154,204,229,.8)';cx.lineWidth=1.2/P.L;cx.stroke();cx.restore()}
-function guide(){const p=pull(),ex=P.x+p.x,ey=P.y+p.y;cx.save();cx.lineWidth=1.5;cx.strokeStyle='rgba(154,204,229,.25)';cx.beginPath();cx.arc(P.x,P.y,p.R,0,Math.PI*2);cx.stroke();cx.strokeStyle='rgba(255,212,0,.6)';cx.lineWidth=2;cx.beginPath();cx.moveTo(P.x,P.y);cx.lineTo(ex,ey);cx.stroke();cx.fillStyle='rgba(255,212,0,.85)';cx.beginPath();cx.arc(ex,ey,5,0,Math.PI*2);cx.fill();cx.restore()}
+function guide(){const p=pull(),d=Math.hypot(p.x,p.y);if(d<4)return;const h=Math.min(32,d);cx.save();cx.translate(P.x,P.y);cx.rotate(Math.atan2(p.y,p.x));cx.fillStyle='rgba(255,212,0,.4)';cx.beginPath();cx.moveTo(0,-7);cx.lineTo(d-h,-7);cx.lineTo(d-h,-20);cx.lineTo(d,0);cx.lineTo(d-h,20);cx.lineTo(d-h,7);cx.lineTo(0,7);cx.closePath();cx.fill();cx.restore()}
 function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));if(state==='play')guide();plane()}
 let shown='',shownNow='';
 function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}requestAnimationFrame(frame)}
