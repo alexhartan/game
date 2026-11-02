@@ -57,7 +57,7 @@ const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course sc
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
-let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,stock={blast:0},owned=[],sig='',acc=0;
+let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0;
 const PU=[{k:'blast',name:'Blast'},{k:'shield',name:'Shield'},{k:'slow',name:'Slow time'}],COL={blast:'#FF4FA3',shield:'#8CF5B0',slow:'#D3DAE4'};
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
@@ -71,16 +71,16 @@ else{const g=H*Math.max(.26,.36-.015*(level-1)),m=rand(g/2+H*.1,H-g/2-H*.1);bars
 function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY),k:PU[Math.floor(Math.random()*3)].k})}nextX+=st}}
 function build(x){bars=[];orbs=[];nextX=x;fill()}
 function respace(r){const a=P.x+P.L;[...bars,...orbs].forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
-function fire(){if(state!=='play'||!owned.length)return;const k=owned[sel];if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});if(!--stock.blast)deplete('blast')}else if(k==='slow'&&slowT<=0)slowT=10;else if(k==='shield'&&shieldT<=0)shieldT=5}
-const can=k=>!owned.includes(k),nm=k=>PU.find(p=>p.k===k).name;
-const badge=k=>k==='blast'?(stock.blast||''):k==='shield'&&shieldT>0?Math.ceil(shieldT):'';
-function add(k){if(k==='blast')stock.blast=3;const n=owned.length;if(!n){owned=[k];sel=0}else if(n===1){owned.splice(sel,0,k);sel++}else owned.splice(sel+1,0,k)}
-function deplete(k){const j=owned.indexOf(k);if(j<0)return;const was=j===sel;owned.splice(j,1);if(!owned.length){sel=0;return}if(!was){if(j<sel)sel--;return}sel=j?j-1:owned.length-1;sig='';paintReel();const r=ui.reel;r.classList.remove('spin');r.style.transform='translateY(-56px)';r.offsetHeight;r.classList.add('spin');r.style.transform='';spinning=true;setTimeout(()=>{r.classList.remove('spin');spinning=false},260)}
-function paintReel(){const n=owned.length,s=sel+'|'+owned.map(k=>k+badge(k)).join()+'|'+(slowT>0);if(s!==sig){sig=s;ui.wheel.hidden=!n;ui.reel.innerHTML=[-2,-1,0,1,2].map(o=>{if(!n||(n===1&&o)||(n===2&&o>0))return'<li class="h-14"></li>';const k=owned[((sel+o)%n+n)%n];return`<li class="flex h-14 items-center gap-3 px-3"><span class="orb orb-${k} h-8 w-8 shrink-0 rounded-full${k==='slow'&&slowT>0?' pie':''}"></span><span class="font-display text-xs uppercase tracking-wider text-white">${nm(k)}</span><span class="ml-auto font-display text-base tabular-nums text-${k}">${badge(k)}</span></li>`}).join('')}if(slowT>0)ui.reel.querySelectorAll('.pie').forEach(el=>el.style.setProperty('--p',slowT/10))}
+function fire(){if(state!=='play'||!owned.length)return;const o=owned[sel];if(o.k==='blast'){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});if(!--o.n)deplete(o)}else if(!o.t)o.t=o.k==='slow'?10:5}
+const can=()=>owned.length<3,nm=k=>PU.find(p=>p.k===k).name;
+const badge=o=>o.k==='blast'?o.n:o.k==='shield'&&o.t>0?Math.ceil(o.t):'';
+function add(k){const it={k,n:3,t:0},n=owned.length;if(!n){owned=[it];sel=0}else if(n===1){owned.splice(sel,0,it);sel++}else owned.splice(sel+1,0,it)}
+function deplete(it){const j=owned.indexOf(it);if(j<0)return;const was=j===sel;owned.splice(j,1);if(!owned.length){sel=0;return}if(!was){if(j<sel)sel--;return}sel=j?j-1:owned.length-1;sig='';paintReel();const r=ui.reel;r.classList.remove('spin');r.style.transform='translateY(-56px)';r.offsetHeight;r.classList.add('spin');r.style.transform='';spinning=true;setTimeout(()=>{r.classList.remove('spin');spinning=false},260)}
+function paintReel(){const n=owned.length,s=sel+'|'+owned.map(o=>o.k+badge(o)+(o.t>0)).join();if(s!==sig){sig=s;ui.wheel.hidden=!n;ui.reel.innerHTML=[-2,-1,0,1,2].map(o=>{if(!n||(n===1&&o)||(n===2&&o>0))return'<li class="h-14"></li>';const i=((sel+o)%n+n)%n,it=owned[i],k=it.k;return`<li class="flex h-14 items-center gap-3 px-3"><span data-i="${i}" class="orb orb-${k} h-8 w-8 shrink-0 rounded-full${k==='slow'&&it.t>0?' pie':''}"></span><span class="font-display text-xs uppercase tracking-wider text-white">${nm(k)}</span><span class="ml-auto font-display text-base tabular-nums text-${k}">${badge(it)}</span></li>`}).join('')}ui.reel.querySelectorAll('.pie').forEach(el=>{const it=owned[+el.dataset.i];if(it)el.style.setProperty('--p',it.t/10)})}
 function step(dir){if(spinning||owned.length<2)return;if(owned.length===2)dir=-1;spinning=true;ui.reel.classList.add('spin');ui.reel.style.transform=`translateY(${-dir*56}px)`;setTimeout(()=>{const n=owned.length;sel=n?(sel+dir+n)%n:0;ui.reel.classList.remove('spin');ui.reel.style.transform='';sig='';paintReel();spinning=false},260)}
 function setLives(){ui.lives.forEach((li,i)=>{li.classList.toggle('text-gold',i<lives);li.classList.toggle('text-charcoal',i>=lives)})}
 function setLevel(){ui.level.textContent=`LEVEL ${level}`}
-function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;stock={blast:0};owned=[];sel=0;slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
+function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;owned=[];sel=0;slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
 function over(){state='over';stage.classList.remove('cursor-none');ui.title.textContent=`Grounded on level ${level}`;ui.text.textContent=`You flew for ${fmt(flown)}. Three hits and the flight is over.`;ui.btn.textContent='Fly again';ui.panel.hidden=false;ui.btn.focus()}
 function pause(){state='paused';stage.classList.remove('cursor-none');ui.title.textContent='Paused';ui.text.textContent='Press Esc or Resume to keep flying.';ui.btn.textContent='Resume';ui.panel.hidden=false}
 function resume(){state='play';ui.panel.hidden=true;stage.classList.add('cursor-none')}
@@ -108,7 +108,7 @@ addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
 function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.findIndex(o=>can(o.k)&&SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){add(orbs[i].k);orbs.splice(i,1)}
-if(slowT>0&&(slowT-=dt)<=0){slowT=0;deplete('slow')}if(shieldT>0&&(shieldT-=dt)<=0){shieldT=0;deplete('shield')}
+shieldT=slowT=0;owned.slice().forEach(o=>{if(o.t>0&&(o.t-=dt)<=0)deplete(o);else if(o.t>0)o.k==='shield'?shieldT=Math.max(shieldT,o.t):slowT=Math.max(slowT,o.t)});
 const hh=P.L*.06,dist=W*1.4*dt,n=Math.max(1,Math.ceil(dist/(BW*.5)));shots.forEach(s=>{for(let j=0;j<n;j++){s.x+=s.ux*dist/n;s.y+=s.uy*dist/n;bars=bars.filter(b=>{const ok=s.x>=b.x-hh&&s.x<=b.x+BW+hh&&s.y>=b.y0-hh&&s.y<=b.y1+hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})}});shots=shots.filter(s=>s.x>-P.L&&s.x<W+P.L&&s.y>-P.L&&s.y<H+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
