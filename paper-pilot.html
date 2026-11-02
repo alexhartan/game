@@ -71,7 +71,7 @@ else{const g=H*Math.max(.26,.36-.015*(level-1)),m=rand(g/2+H*.1,H-g/2-H*.1);bars
 function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY),k:PU[Math.floor(Math.random()*3)].k})}nextX+=st}}
 function build(x){bars=[];orbs=[];nextX=x;fill()}
 function respace(r){const a=P.x+P.L;[...bars,...orbs].forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
-function fire(){if(state!=='play'||!owned.length)return;const k=owned[sel];if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});if(!--stock.blast)deplete('blast')}else if(k==='slow'&&slowT<=0)slowT=10}
+function fire(){if(state!=='play'||!owned.length)return;const k=owned[sel];if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});if(!--stock.blast)deplete('blast')}else if(k==='slow'&&slowT<=0)slowT=10;else if(k==='shield'&&shieldT<=0)shieldT=5}
 const can=k=>!owned.includes(k),nm=k=>PU.find(p=>p.k===k).name;
 const badge=k=>k==='blast'?(stock.blast||''):k==='shield'&&shieldT>0?Math.ceil(shieldT):'';
 function add(k){if(k==='blast')stock.blast=3;const n=owned.length;if(!n){owned=[k];sel=0}else if(n===1){owned.splice(sel,0,k);sel++}else owned.splice(sel+1,0,k)}
@@ -108,7 +108,7 @@ addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
 function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.findIndex(o=>can(o.k)&&SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){add(orbs[i].k);orbs.splice(i,1)}
-if(slowT>0&&(slowT-=dt)<=0){slowT=0;deplete('slow')}if(shieldT>0&&(shieldT-=dt)<=0){shieldT=0;deplete('shield')}if(owned[sel]==='shield'&&shieldT<=0&&!spinning)shieldT=5
+if(slowT>0&&(slowT-=dt)<=0){slowT=0;deplete('slow')}if(shieldT>0&&(shieldT-=dt)<=0){shieldT=0;deplete('shield')}
 const hh=P.L*.06,dist=W*1.4*dt,n=Math.max(1,Math.ceil(dist/(BW*.5)));shots.forEach(s=>{for(let j=0;j<n;j++){s.x+=s.ux*dist/n;s.y+=s.uy*dist/n;bars=bars.filter(b=>{const ok=s.x>=b.x-hh&&s.x<=b.x+BW+hh&&s.y>=b.y0-hh&&s.y<=b.y1+hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})}});shots=shots.filter(s=>s.x>-P.L&&s.x<W+P.L&&s.y>-P.L&&s.y<H+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
