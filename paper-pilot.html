@@ -29,7 +29,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <p id="level" class="font-display text-sm tracking-wider sm:text-base">LEVEL 1</p>
 <p id="timer" class="font-display text-4xl tabular-nums sm:text-5xl">0:30</p>
 </footer>
-<div class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 sm:bottom-6" aria-label="Power-ups, scroll to switch"><div class="relative h-[168px] w-52 overflow-hidden [mask-image:linear-gradient(transparent,#000_30%,#000_70%,transparent)]"><div class="absolute inset-x-0 top-14 h-14 rounded-md border border-sky/30 bg-deep/80"></div><ul id="reel" class="relative -mt-14"></ul></div></div>
+<div id="wheel" hidden class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 sm:bottom-6" aria-label="Power-ups, scroll to switch"><div class="relative h-[168px] w-52 overflow-hidden [mask-image:linear-gradient(transparent,#000_30%,#000_70%,transparent)]"><div class="absolute inset-x-0 top-14 h-14 rounded-md border border-sky/30 bg-deep/80"></div><ul id="reel" class="relative -mt-14"></ul></div></div>
 <section id="panel" class="absolute left-1/2 top-1/2 w-[calc(100%-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky/20 bg-deep/90 p-8 backdrop-blur-sm">
 <h1 id="panelTitle" class="font-display text-2xl leading-tight [text-wrap:balance] sm:text-3xl">How long will you last?</h1>
 <p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Use your mouse to control the game and click to shoot obstacles.</p>
@@ -51,13 +51,13 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 </main>
 <script>
 const stage=document.getElementById('stage'),cv=document.getElementById('sky'),cx=cv.getContext('2d');
-const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel')};
+const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel'),wheel:document.getElementById('wheel')};
 const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,god:true};
 const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
-let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,stock={blast:0,shield:0,slow:0},sig='',acc=0;
+let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,stock={blast:0},owned=[],sig='',acc=0;
 const PU=[{k:'blast',name:'Blast'},{k:'shield',name:'Shield'},{k:'slow',name:'Slow time'}],COL={blast:'#FF4FA3',shield:'#8CF5B0',slow:'#D3DAE4'};
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
@@ -71,15 +71,16 @@ else{const g=H*Math.max(.26,.36-.015*(level-1)),m=rand(g/2+H*.1,H-g/2-H*.1);bars
 function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY),k:PU[Math.floor(Math.random()*3)].k})}nextX+=st}}
 function build(x){bars=[];orbs=[];nextX=x;fill()}
 function respace(r){const a=P.x+P.L;[...bars,...orbs].forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
-function fire(){if(state!=='play')return;const k=PU[sel].k;if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});stock.blast--}else if(k==='slow'&&stock.slow){stock.slow=0;slowT=10}}
-const can=k=>k==='blast'?!stock.blast:k==='shield'?!stock.shield&&shieldT<=0:!stock.slow&&slowT<=0;
-const lit=k=>k==='blast'?stock.blast>0:k==='shield'?stock.shield>0||shieldT>0:stock.slow>0||slowT>0;
+function fire(){if(state!=='play'||!owned.length)return;const k=owned[sel];if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});if(!--stock.blast)deplete('blast')}else if(k==='slow'&&slowT<=0)slowT=10}
+const can=k=>!owned.includes(k),nm=k=>PU.find(p=>p.k===k).name;
 const badge=k=>k==='blast'?(stock.blast||''):k==='shield'&&shieldT>0?Math.ceil(shieldT):'';
-function paintReel(){const s=sel+'|'+PU.map(p=>lit(p.k)+'/'+badge(p.k)).join()+'|'+(slowT>0);if(s!==sig){sig=s;ui.reel.innerHTML=[-2,-1,0,1,2].map(o=>{const p=PU[(sel+o+6)%3],on=lit(p.k);return`<li class="flex h-14 items-center gap-3 px-3"><span class="orb orb-${p.k} h-8 w-8 shrink-0 rounded-full${p.k==='slow'&&slowT>0?' pie':''}${on?'':' opacity-25'}"></span><span class="font-display text-xs uppercase tracking-wider ${on?'text-white':'text-charcoal'}">${p.name}</span><span class="ml-auto font-display text-base tabular-nums text-${p.k}">${badge(p.k)}</span></li>`}).join('')}if(slowT>0)ui.reel.querySelectorAll('.pie').forEach(el=>el.style.setProperty('--p',slowT/10))}
-function step(dir){if(spinning)return;spinning=true;ui.reel.classList.add('spin');ui.reel.style.transform=`translateY(${-dir*56}px)`;setTimeout(()=>{sel=(sel+dir+3)%3;ui.reel.classList.remove('spin');ui.reel.style.transform='';sig='';paintReel();spinning=false},260)}
+function add(k){if(k==='blast')stock.blast=3;const n=owned.length;if(!n){owned=[k];sel=0}else if(n===1){owned.splice(sel,0,k);sel++}else owned.splice(sel+1,0,k)}
+function deplete(k){const j=owned.indexOf(k);if(j<0)return;const was=j===sel;owned.splice(j,1);if(!owned.length){sel=0;return}if(!was){if(j<sel)sel--;return}sel=j?j-1:owned.length-1;sig='';paintReel();const r=ui.reel;r.classList.remove('spin');r.style.transform='translateY(-56px)';r.offsetHeight;r.classList.add('spin');r.style.transform='';spinning=true;setTimeout(()=>{r.classList.remove('spin');spinning=false},260)}
+function paintReel(){const n=owned.length,s=sel+'|'+owned.map(k=>k+badge(k)).join()+'|'+(slowT>0);if(s!==sig){sig=s;ui.wheel.hidden=!n;ui.reel.innerHTML=[-2,-1,0,1,2].map(o=>{if(!n||(n===1&&o)||(n===2&&o>0))return'<li class="h-14"></li>';const k=owned[((sel+o)%n+n)%n];return`<li class="flex h-14 items-center gap-3 px-3"><span class="orb orb-${k} h-8 w-8 shrink-0 rounded-full${k==='slow'&&slowT>0?' pie':''}"></span><span class="font-display text-xs uppercase tracking-wider text-white">${nm(k)}</span><span class="ml-auto font-display text-base tabular-nums text-${k}">${badge(k)}</span></li>`}).join('')}if(slowT>0)ui.reel.querySelectorAll('.pie').forEach(el=>el.style.setProperty('--p',slowT/10))}
+function step(dir){if(spinning||owned.length<2)return;if(owned.length===2)dir=-1;spinning=true;ui.reel.classList.add('spin');ui.reel.style.transform=`translateY(${-dir*56}px)`;setTimeout(()=>{const n=owned.length;sel=n?(sel+dir+n)%n:0;ui.reel.classList.remove('spin');ui.reel.style.transform='';sig='';paintReel();spinning=false},260)}
 function setLives(){ui.lives.forEach((li,i)=>{li.classList.toggle('text-gold',i<lives);li.classList.toggle('text-charcoal',i>=lives)})}
 function setLevel(){ui.level.textContent=`LEVEL ${level}`}
-function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;stock={blast:0,shield:0,slow:0};slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
+function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;stock={blast:0};owned=[];sel=0;slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
 function over(){state='over';stage.classList.remove('cursor-none');ui.title.textContent=`Grounded on level ${level}`;ui.text.textContent=`You flew for ${fmt(flown)}. Three hits and the flight is over.`;ui.btn.textContent='Fly again';ui.panel.hidden=false;ui.btn.focus()}
 function pause(){state='paused';stage.classList.remove('cursor-none');ui.title.textContent='Paused';ui.text.textContent='Press Esc or Resume to keep flying.';ui.btn.textContent='Resume';ui.panel.hidden=false}
 function resume(){state='play';ui.panel.hidden=true;stage.classList.add('cursor-none')}
@@ -106,8 +107,8 @@ addEventListener('keydown',e=>{if(e.key==='t'||e.key==='T')toggleTune();else if(
 addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
-function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.findIndex(o=>can(o.k)&&SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){const k=orbs[i].k;orbs.splice(i,1);stock[k]=k==='blast'?3:1}
-if(slowT>0)slowT=Math.max(0,slowT-dt);if(shieldT>0)shieldT=Math.max(0,shieldT-dt);if(PU[sel].k==='shield'&&stock.shield&&shieldT<=0){stock.shield=0;shieldT=5}
+function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.findIndex(o=>can(o.k)&&SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){add(orbs[i].k);orbs.splice(i,1)}
+if(slowT>0&&(slowT-=dt)<=0){slowT=0;deplete('slow')}if(shieldT>0&&(shieldT-=dt)<=0){shieldT=0;deplete('shield')}if(owned[sel]==='shield'&&shieldT<=0&&!spinning)shieldT=5
 const hh=P.L*.06,dist=W*1.4*dt,n=Math.max(1,Math.ceil(dist/(BW*.5)));shots.forEach(s=>{for(let j=0;j<n;j++){s.x+=s.ux*dist/n;s.y+=s.uy*dist/n;bars=bars.filter(b=>{const ok=s.x>=b.x-hh&&s.x<=b.x+BW+hh&&s.y>=b.y0-hh&&s.y<=b.y1+hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})}});shots=shots.filter(s=>s.x>-P.L&&s.x<W+P.L&&s.y>-P.L&&s.y<H+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
