@@ -28,9 +28,9 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <section id="panel" class="absolute left-1/2 top-1/2 w-[calc(100%-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky/20 bg-deep/90 p-8 backdrop-blur-sm">
 <h1 id="panelTitle" class="font-display text-2xl leading-tight [text-wrap:balance] sm:text-3xl">Close the gap</h1>
 <p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Steer the paper plane with your mouse and thread it through the gaps. Each level lasts 30 seconds, and the bars speed up as you go. Press Esc to pause.</p>
-<button id="startBtn" type="button" class="mt-8 rounded-md bg-gold px-6 py-3 font-display text-sm uppercase tracking-wider text-deep transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-deep">Start flying</button>
+<div class="mt-8 flex flex-wrap gap-3"><button id="startBtn" type="button" class="rounded-md bg-gold px-6 py-3 font-display text-sm uppercase tracking-wider text-deep transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-deep">Start flying</button><button id="tuneBtn" type="button" title="Press T" aria-controls="tune" aria-expanded="false" class="rounded-md border border-sky/30 px-6 py-3 font-display text-sm uppercase tracking-wider text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Tune</button></div>
 </section>
-<form id="tune" hidden class="absolute bottom-20 right-6 w-72 max-w-[calc(100%-48px)] cursor-auto rounded-md border border-sky/20 bg-deep/90 p-5 backdrop-blur-sm sm:bottom-24 sm:right-10">
+<form id="tune" hidden class="absolute bottom-24 right-6 w-72 max-w-[calc(100%-48px)] cursor-auto rounded-md border border-sky/20 bg-deep/90 p-5 backdrop-blur-sm sm:bottom-28 sm:right-10">
 <h2 class="font-display text-sm uppercase tracking-wider">Flight tuning</h2>
 <div id="sliders" class="mt-5 grid gap-4"></div>
 <p class="mt-5 flex justify-between text-sm"><span>Current speed</span><output id="o-now" class="tabular-nums text-sky">100%</output></p>
@@ -41,8 +41,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 </div>
 </form>
 <div class="absolute bottom-6 right-6 flex gap-2 sm:bottom-10 sm:right-10">
-<button id="fsBtn" type="button" title="Press F" class="cursor-auto rounded-md border border-sky/30 bg-deep/80 px-4 py-2 font-display text-xs uppercase tracking-wider text-sky transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Fullscreen</button>
-<button id="tuneBtn" type="button" title="Press T" aria-controls="tune" aria-expanded="false" class="cursor-auto rounded-md border border-sky/30 bg-deep/80 px-4 py-2 font-display text-xs uppercase tracking-wider text-sky transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Tune</button>
+<button id="fsBtn" type="button" title="Press F" aria-label="Fullscreen" class="cursor-auto rounded-md border border-sky/30 bg-deep/80 p-3 text-sky transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"><svg class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" aria-hidden="true"><path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/></svg></button>
 </div>
 </main>
 <script>
@@ -84,7 +83,7 @@ ui.tuneBtn.addEventListener('click',toggleTune);
 ui.fs.hidden=!document.fullscreenEnabled;
 function toggleFs(){if(ui.fs.hidden)return;(document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()).catch(()=>{ui.fs.hidden=true})}
 ui.fs.addEventListener('click',toggleFs);
-document.addEventListener('fullscreenchange',()=>{ui.fs.textContent=document.fullscreenElement?'Exit fullscreen':'Fullscreen';if(!document.fullscreenElement&&state==='play')pause()});
+document.addEventListener('fullscreenchange',()=>{ui.fs.setAttribute('aria-label',document.fullscreenElement?'Exit fullscreen':'Fullscreen');if(!document.fullscreenElement&&state==='play')pause()});
 [ui.tune,ui.tuneBtn,ui.fs].forEach(el=>el.addEventListener('pointermove',e=>e.stopPropagation()));
 stage.addEventListener('pointermove',aim);stage.addEventListener('pointerdown',e=>{if(!e.target.closest('#tune,#tuneBtn,#fsBtn'))aim(e)});
 ui.btn.addEventListener('click',()=>state==='paused'?resume():start());
