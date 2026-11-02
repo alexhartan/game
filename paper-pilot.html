@@ -5,11 +5,15 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Krona+One&display=swap">
 <script>const cw=console.warn;console.warn=(...a)=>{if(!String(a[0]).includes('cdn.tailwindcss.com'))cw(...a)}</script>
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-<script>tailwind.config={theme:{extend:{colors:{deep:'#162140',matte:'#31507A',sky:'#9ACCE5',gold:'#FFD400',charcoal:'#525F7A'},fontFamily:{display:['Nordt','"Krona One"','sans-serif'],body:['"DM Sans"','system-ui','sans-serif']}}}}</script>
+<script>tailwind.config={theme:{extend:{colors:{deep:'#162140',matte:'#31507A',sky:'#9ACCE5',gold:'#FFD400',charcoal:'#525F7A',blast:'#FF4FA3',shield:'#8CF5B0',slow:'#D3DAE4'},fontFamily:{display:['Nordt','"Krona One"','sans-serif'],body:['"DM Sans"','system-ui','sans-serif']}}}}</script>
 <style>
 :root{--deep:#162140;--matte:#31507A;--sky:#9ACCE5;--white:#FFFFFF;--gold:#FFD400;--charcoal:#525F7A;color-scheme:dark}
 html,body{height:100%;background:var(--deep);overflow:hidden}
 .stage{background:repeating-linear-gradient(to bottom,rgb(255 255 255/.03) 0 1px,transparent 1px 4px),linear-gradient(180deg,#1d2c55 0%,var(--deep) 100%);touch-action:none}
+.orb{background:radial-gradient(circle closest-side,transparent 30%,var(--c) 100%)}
+.orb-blast{--c:#FF4FA3}.orb-shield{--c:#8CF5B0}.orb-slow{--c:#D3DAE4}
+.pie{-webkit-mask:conic-gradient(#000 calc(var(--p,1)*1turn),transparent 0);mask:conic-gradient(#000 calc(var(--p,1)*1turn),transparent 0)}
+#reel.spin{transition:transform .26s cubic-bezier(.34,1.56,.64,1)}
 </style>
 <main id="stage" class="stage relative h-full w-full overflow-hidden select-none font-body text-white">
 <canvas id="sky" class="absolute inset-0 h-full w-full" aria-label="Paper plane flying through a maze of bars"></canvas>
@@ -25,7 +29,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <p id="level" class="font-display text-sm tracking-wider sm:text-base">LEVEL 1</p>
 <p id="timer" class="font-display text-4xl tabular-nums sm:text-5xl">0:30</p>
 </footer>
-<div class="pointer-events-none absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3 sm:bottom-10"><div class="grid h-14 w-14 place-items-center rounded-md border border-sky/30 bg-deep/80"><span id="slotIcon" hidden class="h-6 w-6 rounded-full bg-[#FF4FA3]"></span></div><p id="slotName" class="font-display text-xs uppercase tracking-wider text-sky">No power-up</p></div>
+<div class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 sm:bottom-6" aria-label="Power-ups, scroll to switch"><div class="relative h-[168px] w-52 overflow-hidden [mask-image:linear-gradient(transparent,#000_30%,#000_70%,transparent)]"><div class="absolute inset-x-0 top-14 h-14 rounded-md border border-sky/30 bg-deep/80"></div><ul id="reel" class="relative -mt-14"></ul></div></div>
 <section id="panel" class="absolute left-1/2 top-1/2 w-[calc(100%-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky/20 bg-deep/90 p-8 backdrop-blur-sm">
 <h1 id="panelTitle" class="font-display text-2xl leading-tight [text-wrap:balance] sm:text-3xl">How long will you last?</h1>
 <p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Use your mouse to control the game and click to shoot obstacles.</p>
@@ -47,13 +51,14 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 </main>
 <script>
 const stage=document.getElementById('stage'),cv=document.getElementById('sky'),cx=cv.getContext('2d');
-const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),slotIcon:document.getElementById('slotIcon'),slotName:document.getElementById('slotName')};
+const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel')};
 const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,god:true};
 const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
-let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],held=null;
+let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,stock={blast:0,shield:0,slow:0},sig='',acc=0;
+const PU=[{k:'blast',name:'Blast'},{k:'shield',name:'Shield'},{k:'slow',name:'Slow time'}],COL={blast:'#FF4FA3',shield:'#8CF5B0',slow:'#D3DAE4'};
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
 const speed=()=>W*.33*cfg.speed*boost;
@@ -63,14 +68,18 @@ function resize(){const oW=W,oH=H,dpr=Math.min(devicePixelRatio||1,2),r=cv.getBo
 function spawn(x){const kind=Math.random()<.3?'pair':(prev==='top'?'bottom':'top');prev=kind;const open=()=>H*rand(.4,.6);
 if(kind==='top')bars.push({x,y0:0,y1:H-open()});else if(kind==='bottom')bars.push({x,y0:open(),y1:H});
 else{const g=H*Math.max(.26,.36-.015*(level-1)),m=rand(g/2+H*.1,H-g/2-H*.1);bars.push({x,y0:0,y1:m-g/2},{x,y0:m+g/2,y1:H})}}
-function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY)})}nextX+=st}}
+function fill(){while(nextX<W+BW){spawn(nextX);const st=Math.max(200,W*rand(.3,.42))*2.5*eff('course');if(st>P.L*1.6&&Math.random()<.5){const B=bounds();orbs.push({x:nextX+st/2,y:rand(B.minY,B.maxY),k:PU[Math.floor(Math.random()*3)].k})}nextX+=st}}
 function build(x){bars=[];orbs=[];nextX=x;fill()}
 function respace(r){const a=P.x+P.L;[...bars,...orbs].forEach(b=>{if(b.x>a)b.x=a+(b.x-a)*r});nextX=a+(nextX-a)*r;fill()}
-function setSlot(){ui.slotIcon.hidden=!held;ui.slotName.textContent=held?'Blast: click to fire':'No power-up'}
-function fire(){if(state!=='play'||!held)return;const c=Math.cos(P.a),s=Math.sin(P.a),n=.5*.85*P.L;shots.push({x:P.x+n*c,y:P.y+n*s});held=null;setSlot()}
+function fire(){if(state!=='play')return;const k=PU[sel].k;if(k==='blast'&&stock.blast){const p=pull(),d=Math.hypot(p.x,p.y),ux=d>4?p.x/d:1,uy=d>4?p.y/d:0;shots.push({x:P.x+ux*P.L*.3,y:P.y+uy*P.L*.3,ux,uy});stock.blast--}else if(k==='slow'&&stock.slow){stock.slow=0;slowT=10}}
+const can=k=>k==='blast'?!stock.blast:k==='shield'?!stock.shield&&shieldT<=0:!stock.slow&&slowT<=0;
+const lit=k=>k==='blast'?stock.blast>0:k==='shield'?stock.shield>0||shieldT>0:stock.slow>0||slowT>0;
+const badge=k=>k==='blast'?(stock.blast||''):k==='shield'&&shieldT>0?Math.ceil(shieldT):'';
+function paintReel(){const s=sel+'|'+PU.map(p=>lit(p.k)+'/'+badge(p.k)).join()+'|'+(slowT>0);if(s!==sig){sig=s;ui.reel.innerHTML=[-2,-1,0,1,2].map(o=>{const p=PU[(sel+o+6)%3],on=lit(p.k);return`<li class="flex h-14 items-center gap-3 px-3"><span class="orb orb-${p.k} h-8 w-8 shrink-0 rounded-full${p.k==='slow'&&slowT>0?' pie':''}${on?'':' opacity-25'}"></span><span class="font-display text-xs uppercase tracking-wider ${on?'text-white':'text-charcoal'}">${p.name}</span><span class="ml-auto font-display text-base tabular-nums text-${p.k}">${badge(p.k)}</span></li>`}).join('')}if(slowT>0)ui.reel.querySelectorAll('.pie').forEach(el=>el.style.setProperty('--p',slowT/10))}
+function step(dir){if(spinning)return;spinning=true;ui.reel.classList.add('spin');ui.reel.style.transform=`translateY(${-dir*56}px)`;setTimeout(()=>{sel=(sel+dir+3)%3;ui.reel.classList.remove('spin');ui.reel.style.transform='';sig='';paintReel();spinning=false},260)}
 function setLives(){ui.lives.forEach((li,i)=>{li.classList.toggle('text-gold',i<lives);li.classList.toggle('text-charcoal',i>=lives)})}
 function setLevel(){ui.level.textContent=`LEVEL ${level}`}
-function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;held=null;shots=[];fx=[];setSlot();setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
+function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;stock={blast:0,shield:0,slow:0};slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
 function over(){state='over';stage.classList.remove('cursor-none');ui.title.textContent=`Grounded on level ${level}`;ui.text.textContent=`You flew for ${fmt(flown)}. Three hits and the flight is over.`;ui.btn.textContent='Fly again';ui.panel.hidden=false;ui.btn.focus()}
 function pause(){state='paused';stage.classList.remove('cursor-none');ui.title.textContent='Paused';ui.text.textContent='Press Esc or Resume to keep flying.';ui.btn.textContent='Resume';ui.panel.hidden=false}
 function resume(){state='play';ui.panel.hidden=true;stage.classList.add('cursor-none')}
@@ -90,14 +99,16 @@ document.addEventListener('fullscreenchange',()=>{ui.fs.setAttribute('aria-label
 [ui.tune,ui.tuneBtn,ui.fs].forEach(el=>el.addEventListener('pointermove',e=>e.stopPropagation()));
 stage.addEventListener('pointermove',aim);stage.addEventListener('pointerdown',e=>{if(!e.target.closest('#tune,#tuneBtn,#fsBtn'))aim(e)});
 stage.addEventListener('pointerdown',e=>{if(e.button===0&&!e.target.closest('#tune,#fsBtn'))fire()});
+addEventListener('wheel',e=>{if(e.target.closest('#tune'))return;if(spinning){acc=0;return}acc+=e.deltaY;if(Math.abs(acc)>=40){step(acc>0?-1:1);acc=0}},{passive:true});
 ui.btn.addEventListener('click',()=>state==='paused'?resume():start());
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='play')pause()});
 addEventListener('keydown',e=>{if(e.key==='t'||e.key==='T')toggleTune();else if(e.key==='f'||e.key==='F')toggleFs();else if(e.key==='Escape'){if(state==='play')pause();else if(state==='paused')resume()}else if(e.key==='Enter'&&state!=='play'&&!e.target.closest('button,#tune'))state==='paused'?resume():start()});
 addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
-function powerups(dt){if(!held){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.26,i=orbs.findIndex(o=>SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){orbs.splice(i,1);held='blast';setSlot()}}
-const hh=P.L*.07;shots.forEach(s=>{const px=s.x;s.x+=W*1.4*dt;bars=bars.filter(b=>{const ok=b.x<=s.x&&b.x+BW>=px&&b.y0<=s.y+hh&&b.y1>=s.y-hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})});shots=shots.filter(s=>s.x<W+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
+function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.findIndex(o=>can(o.k)&&SHAPE.some(([lx,ly])=>Math.hypot(P.x+(lx*c-ly*s)*.85*P.L-o.x,P.y+(lx*s+ly*c)*.85*P.L-o.y)<r));if(i>=0){const k=orbs[i].k;orbs.splice(i,1);stock[k]=k==='blast'?3:1}
+if(slowT>0)slowT=Math.max(0,slowT-dt);if(shieldT>0)shieldT=Math.max(0,shieldT-dt);if(PU[sel].k==='shield'&&stock.shield&&shieldT<=0){stock.shield=0;shieldT=5}
+const hh=P.L*.06,dist=W*1.4*dt,n=Math.max(1,Math.ceil(dist/(BW*.5)));shots.forEach(s=>{for(let j=0;j<n;j++){s.x+=s.ux*dist/n;s.y+=s.uy*dist/n;bars=bars.filter(b=>{const ok=s.x>=b.x-hh&&s.x<=b.x+BW+hh&&s.y>=b.y0-hh&&s.y<=b.y1+hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})}});shots=shots.filter(s=>s.x>-P.L&&s.x<W+P.L&&s.y>-P.L&&s.y<H+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
 const pu=pull(),tx=clamp(P.x+pu.x*GAIN,B.minX,B.maxX),ty=clamp(P.y+pu.y*GAIN,B.minY,B.maxY);
@@ -106,21 +117,21 @@ if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY),lean=clamp(-P.vy/(H*.6),-1,1);
 P.lift+=((pos+lean)/2-P.lift)*(1-Math.exp(-dt/.15));P.a=-P.lift*.09;
 if(state!=='play')return;
-const d=speed()*dt;bars.forEach(b=>b.x-=d);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
+const d=speed()*dt*(slowT>0?.5:1);bars.forEach(b=>b.x-=d);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
 flown+=dt;left-=dt;boost=Math.min(boost*Math.pow(1.008,cfg.accel*dt),4);if(left<=0){level++;left=LEVEL_TIME;setLevel()}
-powerups(dt);if(inv>0)inv-=dt;else if(hit()){inv=cfg.god?.6:1.6;if(!cfg.god){lives--;setLives();if(!lives)over()}}}
+powerups(dt);if(inv>0)inv-=dt;else if(shieldT<=0&&hit()){inv=cfg.god?.6:1.6;if(!cfg.god){lives--;setLives();if(!lives)over()}}}
 function plane(){cx.save();cx.translate(P.x,P.y);cx.rotate(P.a);cx.scale(P.L,P.L);cx.globalAlpha=inv>0&&state==='play'&&Math.floor(inv*10)%2?.35:1;
 const poly=(pts,f)=>{cx.beginPath();pts.forEach(([x,y],i)=>i?cx.lineTo(x,y):cx.moveTo(x,y));cx.closePath();cx.fillStyle=f;cx.fill()};
 poly([[.5,0],[-.18,.1+.02*P.lift],[-.27,.27+.06*P.lift]],'#BFDDEE');
 poly([[.5,0],[-.2,-.02],[-.5,.17],[-.18,.1+.02*P.lift]],'#FFFFFF');
 poly([[.5,0],[-.36,-.2],[-.2,-.02]],'#E3F0F8');
 cx.beginPath();cx.moveTo(.5,0);cx.lineTo(-.2,-.02);cx.moveTo(.5,0);cx.lineTo(-.18,.1+.02*P.lift);cx.strokeStyle='rgba(154,204,229,.8)';cx.lineWidth=1.2/P.L;cx.stroke();cx.restore()}
-function props(){const r=P.L*.2,hh=P.L*.07,len=P.L*.9;orbs.forEach(o=>{cx.fillStyle='#FF4FA3';cx.beginPath();cx.arc(o.x,o.y,r,0,7);cx.fill();cx.fillStyle='rgba(255,255,255,.55)';cx.beginPath();cx.arc(o.x-r*.3,o.y-r*.3,r*.28,0,7);cx.fill()});shots.forEach(s=>{const g=cx.createLinearGradient(s.x-len,0,s.x,0);g.addColorStop(0,'rgba(255,79,163,0)');g.addColorStop(1,'#FF4FA3');cx.fillStyle=g;cx.fillRect(s.x-len,s.y-hh,len,hh*2)});cx.lineWidth=3;fx.forEach(f=>{const k=f.t/.4;cx.strokeStyle=`rgba(255,79,163,${1-k})`;cx.beginPath();cx.arc(f.x,f.y,P.L*(.1+.4*k),0,7);cx.stroke()})}
+function props(){const r=P.L*.12,hh=P.L*.06,len=P.L*.7;cx.globalAlpha=.5;orbs.forEach(o=>{const g=cx.createRadialGradient(o.x,o.y,0,o.x,o.y,r);g.addColorStop(.3,COL[o.k]+'00');g.addColorStop(1,COL[o.k]);cx.fillStyle=g;cx.beginPath();cx.arc(o.x,o.y,r,0,7);cx.fill()});cx.globalAlpha=1;cx.lineCap='round';cx.lineWidth=hh*2;shots.forEach(s=>{const bx=s.x-s.ux*len,by=s.y-s.uy*len,g=cx.createLinearGradient(bx,by,s.x,s.y);g.addColorStop(0,'rgba(255,79,163,0)');g.addColorStop(1,'#FF4FA3');cx.strokeStyle=g;cx.beginPath();cx.moveTo(bx,by);cx.lineTo(s.x,s.y);cx.stroke()});if(shieldT>0){cx.lineWidth=3;cx.strokeStyle='rgba(140,245,176,.6)';cx.beginPath();cx.arc(P.x,P.y,P.L*.6,0,7);cx.stroke()}cx.lineWidth=3;fx.forEach(f=>{const k=f.t/.4;cx.strokeStyle=`rgba(255,79,163,${1-k})`;cx.beginPath();cx.arc(f.x,f.y,P.L*(.1+.4*k),0,7);cx.stroke()})}
 function guide(){const p=pull(),d=Math.hypot(p.x,p.y);if(d<4)return;const h=Math.min(32,d);cx.save();cx.translate(P.x,P.y);cx.rotate(Math.atan2(p.y,p.x));cx.fillStyle='rgba(255,255,255,.2)';cx.beginPath();cx.moveTo(0,-7);cx.lineTo(d-h,-7);cx.lineTo(d-h,-20);cx.lineTo(d,0);cx.lineTo(d-h,20);cx.lineTo(d-h,7);cx.lineTo(0,7);cx.closePath();cx.fill();cx.restore()}
 function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));props();if(state==='play')guide();plane()}
 let shown='',shownNow='';
-function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}requestAnimationFrame(frame)}
-syncTune();resize();setLives();setSlot();requestAnimationFrame(frame);
+function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}paintReel();requestAnimationFrame(frame)}
+syncTune();resize();setLives();requestAnimationFrame(frame);
 </script>
 
 </body></html>
