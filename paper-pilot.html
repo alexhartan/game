@@ -27,7 +27,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 </footer>
 <section id="panel" class="absolute left-1/2 top-1/2 w-[calc(100%-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky/20 bg-deep/90 p-8 backdrop-blur-sm">
 <h1 id="panelTitle" class="font-display text-2xl leading-tight [text-wrap:balance] sm:text-3xl">Close the gap</h1>
-<p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Steer the paper plane with your mouse and thread it through the gaps. Each level lasts 30 seconds, and the bars speed up as you go. Press Esc to pause.</p>
+<p id="panelText" class="mt-4 text-base leading-relaxed text-sky">Pull your mouse away from the plane to steer it. The further you pull, up to a limit, the faster it moves. Thread it through the gaps. Each level lasts 30 seconds, and the bars speed up as you go. Press Esc to pause.</p>
 <div class="mt-8 flex flex-wrap gap-3"><button id="startBtn" type="button" class="rounded-md bg-gold px-6 py-3 font-display text-sm uppercase tracking-wider text-deep transition-colors hover:bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-deep">Start flying</button><button id="tuneBtn" type="button" title="Press T" aria-controls="tune" aria-expanded="false" class="rounded-md border border-sky/30 px-6 py-3 font-display text-sm uppercase tracking-wider text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Tune</button></div>
 </section>
 <form id="tune" hidden class="absolute bottom-24 right-6 w-72 max-w-[calc(100%-48px)] cursor-auto rounded-md border border-sky/20 bg-deep/90 p-5 backdrop-blur-sm sm:bottom-28 sm:right-10">
@@ -92,8 +92,9 @@ addEventListener('keydown',e=>{if(e.key==='t'||e.key==='T')toggleTune();else if(
 addEventListener('resize',resize);
 const SHAPE=[[.5,0],[-.36,-.2],[-.5,.17],[-.27,.27],[0,0],[.15,.02]];
 function hit(){const c=Math.cos(P.a),s=Math.sin(P.a);return SHAPE.some(([lx,ly])=>{lx*=.85*P.L;ly*=.85*P.L;const px=P.x+lx*c-ly*s,py=P.y+lx*s+ly*c;return bars.some(b=>px>=b.x&&px<=b.x+BW&&py>=b.y0&&py<=b.y1)})}
+const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
 function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
-const tx=B.minX+(B.maxX-B.minX)*clamp(P.tx/W,0,1),ty=clamp(P.ty,B.minY,B.maxY);
+const pu=pull(),tx=clamp(P.x+pu.x*GAIN,B.minX,B.maxX),ty=clamp(P.y+pu.y*GAIN,B.minY,B.maxY);
 P.vx+=(wx*wx*(tx-P.x)-2*wx*P.vx)*dt;P.vy+=(wy*wy*(ty-P.y)-2*wy*P.vy)*dt;P.x+=P.vx*dt;P.y+=P.vy*dt;
 if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.y<B.minY){P.y=clamp(P.y,B.minY,B.maxY);P.vy=0}
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY),lean=clamp(-P.vy/(H*.6),-1,1);
@@ -108,7 +109,8 @@ poly([[.5,0],[-.18,.1+.02*P.lift],[-.27,.27+.06*P.lift]],'#BFDDEE');
 poly([[.5,0],[-.2,-.02],[-.5,.17],[-.18,.1+.02*P.lift]],'#FFFFFF');
 poly([[.5,0],[-.36,-.2],[-.2,-.02]],'#E3F0F8');
 cx.beginPath();cx.moveTo(.5,0);cx.lineTo(-.2,-.02);cx.moveTo(.5,0);cx.lineTo(-.18,.1+.02*P.lift);cx.strokeStyle='rgba(154,204,229,.8)';cx.lineWidth=1.2/P.L;cx.stroke();cx.restore()}
-function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));plane()}
+function guide(){const p=pull(),ex=P.x+p.x,ey=P.y+p.y;cx.save();cx.lineWidth=1.5;cx.strokeStyle='rgba(154,204,229,.25)';cx.beginPath();cx.arc(P.x,P.y,p.R,0,Math.PI*2);cx.stroke();cx.strokeStyle='rgba(255,212,0,.6)';cx.lineWidth=2;cx.beginPath();cx.moveTo(P.x,P.y);cx.lineTo(ex,ey);cx.stroke();cx.fillStyle='rgba(255,212,0,.85)';cx.beginPath();cx.arc(ex,ey,5,0,Math.PI*2);cx.fill();cx.restore()}
+function draw(){cx.clearRect(0,0,W,H);cx.fillStyle='rgba(154,204,229,.72)';bars.forEach(b=>cx.fillRect(b.x,b.y0,BW,b.y1-b.y0));if(state==='play')guide();plane()}
 let shown='',shownNow='';
 function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}requestAnimationFrame(frame)}
 syncTune();resize();setLives();requestAnimationFrame(frame);
