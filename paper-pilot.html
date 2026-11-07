@@ -60,9 +60,9 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 const stage=document.getElementById('stage'),cv=document.getElementById('sky'),cx=cv.getContext('2d'),fv=document.getElementById('fx'),fc=fv.getContext('2d'),gv=document.getElementById('gd'),gc=gv.getContext('2d');
 const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel'),wheel:document.getElementById('wheel')};
 const rb=document.getElementById('restartBtn');rb.addEventListener('click',()=>{state='over';start()});
-const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,pitch:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:80,wsyB:120,bsxT:100,bsxB:100,bsyT:110,bsyB:90,byT:3,byB:-3,wrotT:0,wrotB:0,brotT:-1,brotB:1};
+const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,vspeed:1,vinertia:1,pitch:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:80,wsyB:120,bsxT:100,bsxB:100,bsyT:110,bsyB:90,byT:3,byB:-3,wrotT:0,wrotB:0,brotT:-1,brotB:1};
 const MSPEC=[['rot','Plane rotation (°)'],['wsx','Wings scale X (%)'],['wsy','Wings scale Y (%)'],['wrot','Wings rotate (°)'],['bsx','Base scale X (%)'],['bsy','Base scale Y (%)'],['brot','Base rotate (°)'],['by','Base move Y (%)']];
-const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia'],['pitch','Mouse nose tilt']];
+const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia'],['vspeed','Vertical speed'],['vinertia','Vertical inertia'],['pitch','Mouse nose tilt']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const G={x:0,y:0},P={pitch:0,x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
@@ -130,9 +130,9 @@ function powerups(dt){const c=Math.cos(P.a),s=Math.sin(P.a),r=P.L*.18,i=orbs.fin
 shieldT=slowT=0;owned.slice().forEach(o=>{if(o.t>0&&(o.t-=dt)<=0)deplete(o);else if(o.t>0)o.k==='shield'?shieldT=Math.max(shieldT,o.t):slowT=Math.max(slowT,o.t)});
 const hh=P.L*.06,dist=W*1.4*dt,n=Math.max(1,Math.ceil(dist/(BW*.5)));shots.forEach(s=>{for(let j=0;j<n;j++){s.x+=s.ux*dist/n;s.y+=s.uy*dist/n;bars=bars.filter(b=>{const ok=s.x>=b.x-hh&&s.x<=b.x+BW+hh&&s.y>=b.y0-hh&&s.y<=b.y1+hh;if(ok)fx.push({x:b.x+BW/2,y:clamp(s.y,b.y0,b.y1),t:0});return!ok})}});shots=shots.filter(s=>s.x>-P.L&&s.x<W+P.L&&s.y>-P.L&&s.y<H+P.L);fx.forEach(f=>f.t+=dt);fx=fx.filter(f=>f.t<.4)}
 const GAIN=3;function pull(){const R=H*.3,dx=P.tx-P.x,dy=P.ty-P.y,d=Math.hypot(dx,dy),k=d>R?R/d:1;return{x:dx*k,y:dy*k,R}}
-function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1));
+function update(dt){if(state==='paused')return;const B=bounds(),wx=1/(.9*eff('inertia',.1)),wy=1/(.6*eff('inertia',.1)*eff('vinertia',.1));
 const pu=pull(),gk=1-Math.exp(-dt/.08);G.x+=(pu.x-G.x)*gk;G.y+=(pu.y-G.y)*gk;const tx=clamp(P.x+pu.x*GAIN,B.minX,B.maxX),ty=clamp(P.y+pu.y*GAIN,B.minY,B.maxY);
-P.vx+=(wx*wx*(tx-P.x)-2*wx*P.vx)*dt;P.vy+=(wy*wy*(ty-P.y)-2*wy*P.vy)*dt;P.x+=P.vx*dt;P.y+=P.vy*dt;
+P.vx+=(wx*wx*(tx-P.x)-2*wx*P.vx)*dt;P.vy+=(wy*wy*(ty-P.y)*cfg.vspeed*eff('vinertia',.1)-2*wy*P.vy)*dt;P.x+=P.vx*dt;P.y+=P.vy*dt;
 if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.y<B.minY){P.y=clamp(P.y,B.minY,B.maxY);P.vy=0}
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY);
 P.lift+=((1-pos)/2-P.lift)*(1-Math.exp(-dt/.15));P.pitch+=(clamp(pu.y/(H*.3),-1,1)-P.pitch)*(1-Math.exp(-dt/.05));P.a=(mix('rot',P.lift)+7.5*cfg.pitch*P.pitch)*Math.PI/180;
