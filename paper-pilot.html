@@ -57,12 +57,12 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <script>
 const stage=document.getElementById('stage'),cv=document.getElementById('sky'),cx=cv.getContext('2d'),fv=document.getElementById('fx'),fc=fv.getContext('2d'),gv=document.getElementById('gd'),gc=gv.getContext('2d');
 const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel'),wheel:document.getElementById('wheel')};
-const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:90,wsyB:110,bsxT:100,bsxB:100,bsyT:120,bsyB:100,byT:4,byB:-3};
+const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,pitch:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:90,wsyB:110,bsxT:100,bsxB:100,bsyT:120,bsyB:100,byT:4,byB:-3};
 const MSPEC=[['rot','Plane rotation (°)'],['wsx','Wings scale X (%)'],['wsy','Wings scale Y (%)'],['bsx','Base scale X (%)'],['bsy','Base scale Y (%)'],['by','Base move Y (%)']];
-const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia']];
+const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia'],['pitch','Mouse nose tilt']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
-const G={x:0,y:0},P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
+const G={x:0,y:0},P={pitch:0,x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
 let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0,trails=[],banner=null,trailAcc=0,bag=[];
 function addTrail(x){if(!bag.length)bag=[0,1,2,3,4,5].sort(()=>Math.random()-.5);trails.push({x,y:Math.round((bag.pop()+rand(.15,.85))*H/6)+.5,l:W*rand(.25,.4),v:rand(1.9,2.1)})}
 function seedTrails(){trails=[];trailAcc=-W*.12;for(let x=W*rand(0,.24);x<W;x+=W*rand(.2,.28))addTrail(x)}
@@ -128,7 +128,7 @@ const pu=pull(),gk=1-Math.exp(-dt/.08);G.x+=(pu.x-G.x)*gk;G.y+=(pu.y-G.y)*gk;con
 P.vx+=(wx*wx*(tx-P.x)-2*wx*P.vx)*dt;P.vy+=(wy*wy*(ty-P.y)-2*wy*P.vy)*dt;P.x+=P.vx*dt;P.y+=P.vy*dt;
 if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.y<B.minY){P.y=clamp(P.y,B.minY,B.maxY);P.vy=0}
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY);
-P.lift+=((1-pos)/2-P.lift)*(1-Math.exp(-dt/.15));P.a=mix('rot',P.lift)*Math.PI/180;
+P.lift+=((1-pos)/2-P.lift)*(1-Math.exp(-dt/.15));P.pitch+=(clamp(pu.y/(H*.3),-1,1)-P.pitch)*(1-Math.exp(-dt/.05));P.a=(mix('rot',P.lift)+15*cfg.pitch*P.pitch)*Math.PI/180;
 if(state!=='play')return;
 const d=speed()*dt*(slowT>0?.5:1);bars.forEach(b=>b.x-=d);if(banner&&(banner.x-=d*.35)+banner.w<0&&banner.w)banner=null;trailAcc+=d;while(trailAcc>=0){trailAcc-=W*rand(.1,.14);addTrail(W)}trails.forEach(t=>t.x-=d*t.v);trails=trails.filter(t=>t.x+t.l>0);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
 flown+=dt;left-=dt;boost=Math.min(boost*Math.pow(1.008,cfg.accel*dt),4);if(left<=0){level++;left=LEVEL_TIME;setLevel()}
