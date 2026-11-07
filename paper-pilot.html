@@ -128,7 +128,7 @@ const pu=pull(),gk=1-Math.exp(-dt/.08);G.x+=(pu.x-G.x)*gk;G.y+=(pu.y-G.y)*gk;con
 P.vx+=(wx*wx*(tx-P.x)-2*wx*P.vx)*dt;P.vy+=(wy*wy*(ty-P.y)-2*wy*P.vy)*dt;P.x+=P.vx*dt;P.y+=P.vy*dt;
 if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.y<B.minY){P.y=clamp(P.y,B.minY,B.maxY);P.vy=0}
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY);
-P.lift+=((1-pos)/2-P.lift)*(1-Math.exp(-dt/.15));P.pitch+=(clamp(pu.y/(H*.3),-1,1)-P.pitch)*(1-Math.exp(-dt/.05));P.a=(mix('rot',P.lift)+15*cfg.pitch*P.pitch)*Math.PI/180;
+P.lift+=((1-pos)/2-P.lift)*(1-Math.exp(-dt/.15));P.pitch+=(clamp(pu.y/(H*.3),-1,1)-P.pitch)*(1-Math.exp(-dt/.05));P.a=(mix('rot',P.lift)+7.5*cfg.pitch*P.pitch)*Math.PI/180;
 if(state!=='play')return;
 const d=speed()*dt*(slowT>0?.5:1);bars.forEach(b=>b.x-=d);if(banner&&(banner.x-=d*.35)+banner.w<0&&banner.w)banner=null;trailAcc+=d;while(trailAcc>=0){trailAcc-=W*rand(.1,.14);addTrail(W)}trails.forEach(t=>t.x-=d*t.v);trails=trails.filter(t=>t.x+t.l>0);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
 flown+=dt;left-=dt;boost=Math.min(boost*Math.pow(1.008,cfg.accel*dt),4);if(left<=0){level++;left=LEVEL_TIME;setLevel()}
