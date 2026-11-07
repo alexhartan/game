@@ -59,7 +59,9 @@ const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course sc
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const P={x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
-let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0,trails=[],banner=null;
+let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0,trails=[],banner=null,trailAcc=0,bag=[];
+function addTrail(x){if(!bag.length)bag=[0,1,2,3,4,5].sort(()=>Math.random()-.5);trails.push({x,y:Math.round((bag.pop()+rand(.15,.85))*H/6)+.5,l:W*rand(.25,.4),v:rand(1.9,2.1)})}
+function seedTrails(){trails=[];trailAcc=-W*.12;for(let x=W*rand(0,.24);x<W;x+=W*rand(.2,.28))addTrail(x)}
 const PU=[{k:'blast',name:'Blast'},{k:'shield',name:'Shield'},{k:'slow',name:'Slow time'}],COL={blast:'#FF4FA3',shield:'#8CF5B0',slow:'#D3DAE4'};
 const clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
@@ -83,7 +85,7 @@ function paintReel(){const n=owned.length,s=sel+'|'+owned.map(o=>o.k+badge(o)+(o
 function step(dir){if(spinning||owned.length<2)return;if(owned.length===2)dir=-1;spinning=true;ui.reel.classList.add('spin');ui.reel.style.transform=`translateY(${-dir*56}px)`;setTimeout(()=>{const n=owned.length;sel=n?(sel+dir+n)%n:0;ui.reel.classList.remove('spin');ui.reel.style.transform='';sig='';paintReel();spinning=false},260)}
 function setLives(){ui.lives.forEach((li,i)=>{li.classList.toggle('text-gold',i<lives);li.classList.toggle('text-charcoal',i>=lives)})}
 function setLevel(){ui.level.textContent=`LEVEL ${level}`;banner={x:W,t:`LEVEL ${level}`,w:0}}
-function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;owned=[];trails=[];sel=0;slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
+function start(){if(state==='over')build(W*.85);state='play';level=1;lives=3;left=LEVEL_TIME;flown=0;inv=0;boost=1;owned=[];seedTrails();sel=0;slowT=0;shieldT=0;shots=[];fx=[];setLives();setLevel();ui.panel.hidden=true;stage.classList.add('cursor-none')}
 function over(){state='over';stage.classList.remove('cursor-none');ui.title.textContent=`Grounded on level ${level}`;ui.text.textContent=`You flew for ${fmt(flown)}. Three hits and the flight is over.`;ui.btn.textContent='Fly again';ui.panel.hidden=false;ui.btn.focus()}
 function pause(){state='paused';stage.classList.remove('cursor-none');ui.title.textContent='Paused';ui.text.textContent='Press Esc or Resume to keep flying.';ui.btn.textContent='Resume';ui.panel.hidden=false}
 function resume(){state='play';ui.panel.hidden=true;stage.classList.add('cursor-none')}
@@ -123,7 +125,7 @@ if(P.x>B.maxX||P.x<B.minX){P.x=clamp(P.x,B.minX,B.maxX);P.vx=0}if(P.y>B.maxY||P.
 const pos=1-2*(P.y-B.minY)/(B.maxY-B.minY),lean=clamp(-P.vy/(H*.6),-1,1);
 P.lift+=((pos+lean)/2-P.lift)*(1-Math.exp(-dt/.15));P.a=-P.lift*.09;
 if(state!=='play')return;
-const d=speed()*dt*(slowT>0?.5:1);bars.forEach(b=>b.x-=d);if(banner&&(banner.x-=d*.35)+banner.w<0&&banner.w)banner=null;if(Math.random()<dt*3)trails.push({x:W,y:Math.round(rand(0,H))+.5,l:W*rand(.25,.4),v:rand(1.6,2.4)});trails.forEach(t=>t.x-=d*t.v);trails=trails.filter(t=>t.x+t.l>0);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
+const d=speed()*dt*(slowT>0?.5:1);bars.forEach(b=>b.x-=d);if(banner&&(banner.x-=d*.35)+banner.w<0&&banner.w)banner=null;trailAcc+=d;while(trailAcc>=0){trailAcc-=W*rand(.1,.14);addTrail(W)}trails.forEach(t=>t.x-=d*t.v);trails=trails.filter(t=>t.x+t.l>0);orbs.forEach(o=>o.x-=d);orbs=orbs.filter(o=>o.x>-P.L);nextX-=d;bars=bars.filter(b=>b.x+BW>0);fill();
 flown+=dt;left-=dt;boost=Math.min(boost*Math.pow(1.008,cfg.accel*dt),4);if(left<=0){level++;left=LEVEL_TIME;setLevel()}
 powerups(dt);if(inv>0)inv-=dt;else if(shieldT<=0&&hit()){inv=cfg.god?.6:1.6;if(!cfg.god){lives--;setLives();if(!lives)over()}}}
 const SPRITE=[['M112.657 142.243L95.6166 49.3856C95.5576 49.0639 95.8183 48.773 96.1445 48.7966L433.989 73.246C434.566 73.2878 434.623 74.113 434.057 74.2337L113.253 142.642C112.978 142.701 112.708 142.52 112.657 142.243Z','#B4C4CF'],['M112.913 142.079L89.2259 72.6102C89.1152 72.2855 89.3569 71.9483 89.6999 71.9488L437.035 72.4923C437.635 72.4933 437.725 73.3564 437.138 73.4814L113.491 142.407C113.243 142.459 112.995 142.319 112.913 142.079Z','#D8E6F0'],['M147.56 6.40545L95.7235 48.9507C95.3736 49.2379 95.5549 49.805 96.0064 49.8361L437.591 73.3095C438.207 73.3517 438.338 72.4602 437.737 72.3231L147.989 6.30443C147.838 6.27009 147.68 6.30739 147.56 6.40545Z','#FFFFFF'],['M7.64248 120.843L84.0161 58.5258C84.2053 58.3714 84.4444 58.2916 84.6885 58.3014L437.528 72.4898C438.145 72.5146 438.178 73.416 437.565 73.4862L8.38841 122.612C7.39637 122.725 6.86883 121.475 7.64248 120.843Z','#FFFFFF']].map(([d,f])=>[new Path2D(d),f]);
