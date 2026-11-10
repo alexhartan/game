@@ -52,7 +52,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <details class="mt-6"><summary class="cursor-pointer font-display text-xs uppercase tracking-wider">Plane motion</summary>
 <div id="motion" class="mt-3 grid grid-cols-[1fr_4rem_4rem] items-center gap-2 text-sm"><span></span><span class="text-right text-xs text-charcoal">Top</span><span class="text-right text-xs text-charcoal">Bottom</span></div></details>
 <div class="mt-5 flex items-center justify-between gap-4">
-<button id="tuneReset" type="button" class="rounded-md border border-sky/30 px-3 py-2 text-xs font-medium text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Reset defaults</button>
+<button id="tuneReset" type="button" class="rounded-md border border-sky/30 px-3 py-2 text-xs font-medium text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Reset defaults</button><button id="tuneSave" type="button" class="rounded-md border border-sky/30 px-3 py-2 text-xs font-medium text-sky transition-colors hover:border-white hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Set as default</button>
 <p class="text-xs text-charcoal">Press T to toggle</p>
 </div>
 </form>
@@ -72,6 +72,8 @@ const caveK=()=>clamp(cfg.cwidth,.5,1.6);
 const SPEC=[['cwidth','Cave width'],['speed','Speed'],['accel','Acceleration'],['vspeed','Vertical speed'],['vinertia','Vertical inertia'],['pitch','Mouse nose tilt']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
 ['plane','bars','course','inertia'].forEach(k=>cfg[k]=DEF[k]);
+const RK=[...SPEC,...DSPEC].map(s=>s[0]),MID=k=>DSPEC.some(s=>s[0]===k)?3:1;let BASE={},SAVED={};try{BASE=JSON.parse(localStorage.getItem('pp-base')||'{}');SAVED=JSON.parse(localStorage.getItem('pp-saved')||'{}')}catch(e){}
+const BS=k=>BASE[k]??MID(k),disp=k=>cfg[k]*MID(k)/BS(k);
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const G={x:0,y:0},P={pitch:0,x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
 let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0,trails=[],banner=null,trailAcc=0,bag=[],wt=0,mode='cave',cave=[],sec=null,islands=[],islandIn=0;
@@ -124,12 +126,13 @@ function unlock(){if(document.pointerLockElement)document.exitPointerLock()}
 ui.sliders.innerHTML=SPEC.map(([k,l])=>`<label for="t-${k}" class="grid gap-2 text-sm"><span class="flex justify-between"><span>${l}</span><output id="o-${k}" class="tabular-nums text-sky"></output></span><input id="t-${k}" type="range" min="0" max="2" step="0.05" class="w-full accent-gold"></label>`).join('');
 document.getElementById('motion').insertAdjacentHTML('beforeend',MSPEC.map(([k,l])=>`<span>${l}</span>`+['T','B'].map(s=>`<input id="t-${k}${s}" type="number" step="any" aria-label="${l} ${s==='T'?'top':'bottom'}" class="w-full rounded-md border border-sky/30 bg-deep px-2 py-1 text-right tabular-nums text-white focus:border-white focus:outline-none">`).join('')).join(''));
 document.getElementById('density').innerHTML=DSPEC.map(([k,l])=>`<label for="t-${k}" class="grid grid-cols-[5rem_1fr_1rem] items-center gap-3 text-sm"><span>${l}</span><input id="t-${k}" type="range" min="1" max="5" step="1" class="w-full accent-gold"><output id="o-${k}" class="text-right tabular-nums text-sky"></output></label>`).join('');
-function syncTune(){SPEC.forEach(([k])=>{document.getElementById('t-'+k).value=cfg[k];document.getElementById('o-'+k).textContent=Math.round(cfg[k]*100)+'%'});ui.god.checked=cfg.god;MSPEC.forEach(([k])=>['T','B'].forEach(s=>document.getElementById('t-'+k+s).value=cfg[k+s]));DSPEC.forEach(([k])=>{document.getElementById('t-'+k).value=cfg[k];document.getElementById('o-'+k).textContent=cfg[k]})}
+function syncTune(){SPEC.forEach(([k])=>{document.getElementById('t-'+k).value=disp(k);document.getElementById('o-'+k).textContent=Math.round(disp(k)*100)+'%'});ui.god.checked=cfg.god;MSPEC.forEach(([k])=>['T','B'].forEach(s=>document.getElementById('t-'+k+s).value=cfg[k+s]));DSPEC.forEach(([k])=>{document.getElementById('t-'+k).value=disp(k);document.getElementById('o-'+k).textContent=Math.round(disp(k)*10)/10})}
 function saveTune(){sizes();syncTune();try{localStorage.setItem('pp-tune2',JSON.stringify(cfg))}catch(e){}}
 function toggleTune(){ui.tune.hidden=!ui.tune.hidden;ui.tuneBtn.setAttribute('aria-expanded',String(!ui.tune.hidden))}
-ui.tune.addEventListener('input',e=>{const k=e.target.id.slice(2);if(k==='god')cfg.god=e.target.checked;else{if(e.target.value==='')return;const o=eff('course');cfg[k]=+e.target.value;if(k==='course')respace(eff('course')/o)}saveTune()});
+ui.tune.addEventListener('input',e=>{const k=e.target.id.slice(2);if(k==='god')cfg.god=e.target.checked;else{if(e.target.value==='')return;const o=eff('course');cfg[k]=+e.target.value*(RK.includes(k)?BS(k)/MID(k):1);if(k==='course')respace(eff('course')/o)}saveTune()});
 ui.tune.addEventListener('submit',e=>e.preventDefault());
-ui.reset.addEventListener('click',()=>{const o=eff('course');cfg={...DEF};respace(eff('course')/o);saveTune()});
+document.getElementById('tuneSave').addEventListener('click',()=>{RK.forEach(k=>BASE[k]=cfg[k]);SAVED={...cfg};try{localStorage.setItem('pp-base',JSON.stringify(BASE));localStorage.setItem('pp-saved',JSON.stringify(SAVED))}catch(e){}saveTune()});
+ui.reset.addEventListener('click',()=>{const o=eff('course');cfg={...DEF,...SAVED};respace(eff('course')/o);saveTune()});
 ui.tuneBtn.addEventListener('click',toggleTune);
 const ctrlBtn=document.getElementById('ctrlBtn'),ctrlList=document.getElementById('controls');ctrlBtn.addEventListener('click',()=>{ctrlList.hidden=!ctrlList.hidden;ctrlBtn.setAttribute('aria-expanded',String(!ctrlList.hidden))});
 ui.fs.hidden=!document.fullscreenEnabled;
