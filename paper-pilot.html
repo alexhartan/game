@@ -47,6 +47,8 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <div id="sliders" class="mt-5 grid gap-4"></div>
 <p class="mt-5 flex justify-between text-sm"><span>Current speed</span><output id="o-now" class="tabular-nums text-sky">100%</output></p>
 <label for="t-god" class="mt-5 flex items-center justify-between text-sm"><span>Indestructible</span><input id="t-god" type="checkbox" class="h-4 w-4 accent-gold"></label>
+<h3 class="mt-6 font-display text-xs uppercase tracking-wider">Power-up ratio</h3>
+<div id="density" class="mt-3 grid gap-3"></div>
 <details class="mt-6"><summary class="cursor-pointer font-display text-xs uppercase tracking-wider">Plane motion</summary>
 <div id="motion" class="mt-3 grid grid-cols-[1fr_4rem_4rem] items-center gap-2 text-sm"><span></span><span class="text-right text-xs text-charcoal">Top</span><span class="text-right text-xs text-charcoal">Bottom</span></div></details>
 <div class="mt-5 flex items-center justify-between gap-4">
@@ -63,7 +65,8 @@ const stage=document.getElementById('stage'),cv=document.getElementById('sky'),c
 const ui={level:document.getElementById('level'),timer:document.getElementById('timer'),lives:[...document.querySelectorAll('#lives li')],panel:document.getElementById('panel'),title:document.getElementById('panelTitle'),text:document.getElementById('panelText'),btn:document.getElementById('startBtn'),tune:document.getElementById('tune'),tuneBtn:document.getElementById('tuneBtn'),sliders:document.getElementById('sliders'),god:document.getElementById('t-god'),reset:document.getElementById('tuneReset'),now:document.getElementById('o-now'),fs:document.getElementById('fsBtn'),reel:document.getElementById('reel'),wheel:document.getElementById('wheel')};
 const rb=document.getElementById('restartBtn');rb.addEventListener('click',()=>{state='over';start()});
 const modesEl=document.getElementById('modes');document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{mode=r.value;build(W*.62)}));
-const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,vspeed:1,vinertia:1,pitch:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:80,wsyB:120,bsxT:100,bsxB:100,bsyT:110,bsyB:90,byT:3,byB:-3,wrotT:0,wrotB:0,brotT:-1,brotB:1};
+const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,vspeed:1,vinertia:1,pitch:1,dBlast:3,dShield:3,dSlow:3,dBrake:2,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:80,wsyB:120,bsxT:100,bsxB:100,bsyT:110,bsyB:90,byT:3,byB:-3,wrotT:0,wrotB:0,brotT:-1,brotB:1};
+const DSPEC=[['dBlast','Blast'],['dShield','Shield'],['dSlow','Slow-mo'],['dBrake','Decel']];
 const MSPEC=[['rot','Plane rotation (°)'],['wsx','Wings scale X (%)'],['wsy','Wings scale Y (%)'],['wrot','Wings rotate (°)'],['bsx','Base scale X (%)'],['bsy','Base scale Y (%)'],['brot','Base rotate (°)'],['by','Base move Y (%)']];
 const SPEC=[['speed','Speed'],['accel','Acceleration'],['vspeed','Vertical speed'],['vinertia','Vertical inertia'],['pitch','Mouse nose tilt']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
@@ -74,7 +77,7 @@ let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,le
 function addTrail(x){if(!bag.length)bag=[0,1,2,3,4,5].sort(()=>Math.random()-.5);trails.push({x,y:Math.round((bag.pop()+rand(.15,.85))*H/6)+.5,l:W*rand(.25,.4),v:rand(1.9,2.1)})}
 function seedTrails(){trails=[];trailAcc=-W*.12;for(let x=W*rand(0,.24);x<W;x+=W*rand(.2,.28))addTrail(x)}
 const PU=[{k:'blast',name:'Blast'},{k:'shield',name:'Shield'},{k:'slow',name:'Slow-mo'},{k:'brake',name:'Decel'}],ICON={blast:'<path d="M13 3 5 14h6l-1 7 8-11h-6z"/>',shield:'<path d="M12 3 5 6v5c0 5 3 8 7 10 4-2 7-5 7-10V6z"/>',slow:'<path d="M6 3h12L6 21h12z"/>',brake:'<path d="m7 5 5 5 5-5M7 13l5 5 5-5"/>'},COL={blast:'#FF8095',shield:'#95FF80',slow:'#E0D1FF',brake:'#80F4FF'};
-const pick=()=>{const b=orbs.some(o=>o.k==='brake'),l='blast shield slow health blast shield slow health'.split(' ');if(!b&&Math.random()<Math.min(1,flown/120))l.push('brake');return l[Math.floor(Math.random()*l.length)]};
+const pick=()=>{const w=[['blast',cfg.dBlast],['shield',cfg.dShield],['slow',cfg.dSlow],['health',3],['brake',orbs.some(o=>o.k==='brake')?0:cfg.dBrake*Math.min(1,flown/120)]],tot=w.reduce((s,[,v])=>s+v,0);let r=Math.random()*tot;for(const [k,v] of w)if((r-=v)<0)return k;return'health'};
 const orbRoom=x=>{const o=orbs[orbs.length-1];return!o||x-o.x>W*1.2};
 const mix=(k,t)=>cfg[k+'T']+(cfg[k+'B']-cfg[k+'T'])*t,clamp=(v,a,b)=>Math.min(Math.max(v,a),b),rand=(a,b)=>a+Math.random()*(b-a);
 const bounds=()=>{const minX=P.L*.5+16,maxX=Math.max(minX,W/2-P.L*.5);return{minX,maxX,minY:P.L*.3+8,maxY:H-P.L*.3-8}};
@@ -119,7 +122,8 @@ function lock(){if(!document.fullscreenElement||!stage.requestPointerLock||docum
 function unlock(){if(document.pointerLockElement)document.exitPointerLock()}
 ui.sliders.innerHTML=SPEC.map(([k,l])=>`<label for="t-${k}" class="grid gap-2 text-sm"><span class="flex justify-between"><span>${l}</span><output id="o-${k}" class="tabular-nums text-sky"></output></span><input id="t-${k}" type="range" min="0" max="2" step="0.05" class="w-full accent-gold"></label>`).join('');
 document.getElementById('motion').insertAdjacentHTML('beforeend',MSPEC.map(([k,l])=>`<span>${l}</span>`+['T','B'].map(s=>`<input id="t-${k}${s}" type="number" step="any" aria-label="${l} ${s==='T'?'top':'bottom'}" class="w-full rounded-md border border-sky/30 bg-deep px-2 py-1 text-right tabular-nums text-white focus:border-white focus:outline-none">`).join('')).join(''));
-function syncTune(){SPEC.forEach(([k])=>{document.getElementById('t-'+k).value=cfg[k];document.getElementById('o-'+k).textContent=Math.round(cfg[k]*100)+'%'});ui.god.checked=cfg.god;MSPEC.forEach(([k])=>['T','B'].forEach(s=>document.getElementById('t-'+k+s).value=cfg[k+s]))}
+document.getElementById('density').innerHTML=DSPEC.map(([k,l])=>`<label for="t-${k}" class="grid grid-cols-[5rem_1fr_1rem] items-center gap-3 text-sm"><span>${l}</span><input id="t-${k}" type="range" min="1" max="5" step="1" class="w-full accent-gold"><output id="o-${k}" class="text-right tabular-nums text-sky"></output></label>`).join('');
+function syncTune(){SPEC.forEach(([k])=>{document.getElementById('t-'+k).value=cfg[k];document.getElementById('o-'+k).textContent=Math.round(cfg[k]*100)+'%'});ui.god.checked=cfg.god;MSPEC.forEach(([k])=>['T','B'].forEach(s=>document.getElementById('t-'+k+s).value=cfg[k+s]));DSPEC.forEach(([k])=>{document.getElementById('t-'+k).value=cfg[k];document.getElementById('o-'+k).textContent=cfg[k]})}
 function saveTune(){sizes();syncTune();try{localStorage.setItem('pp-tune2',JSON.stringify(cfg))}catch(e){}}
 function toggleTune(){ui.tune.hidden=!ui.tune.hidden;ui.tuneBtn.setAttribute('aria-expanded',String(!ui.tune.hidden))}
 ui.tune.addEventListener('input',e=>{const k=e.target.id.slice(2);if(k==='god')cfg.god=e.target.checked;else{if(e.target.value==='')return;const o=eff('course');cfg[k]=+e.target.value;if(k==='course')respace(eff('course')/o)}saveTune()});
