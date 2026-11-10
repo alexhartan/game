@@ -65,8 +65,9 @@ const rb=document.getElementById('restartBtn');rb.addEventListener('click',()=>{
 const modesEl=document.getElementById('modes');document.querySelectorAll('input[name=mode]').forEach(r=>r.addEventListener('change',()=>{mode=r.value;build(W*.62)}));
 const LEVEL_TIME=30,DEF={plane:1,bars:1,course:1,speed:1,accel:1,inertia:1,vspeed:1,vinertia:1,pitch:1,god:true,rotT:-4,rotB:8,wsxT:100,wsxB:100,wsyT:80,wsyB:120,bsxT:100,bsxB:100,bsyT:110,bsyB:90,byT:3,byB:-3,wrotT:0,wrotB:0,brotT:-1,brotB:1};
 const MSPEC=[['rot','Plane rotation (°)'],['wsx','Wings scale X (%)'],['wsy','Wings scale Y (%)'],['wrot','Wings rotate (°)'],['bsx','Base scale X (%)'],['bsy','Base scale Y (%)'],['brot','Base rotate (°)'],['by','Base move Y (%)']];
-const SPEC=[['plane','Plane size'],['bars','Obstacle size'],['course','Course scale'],['speed','Speed'],['accel','Acceleration'],['inertia','Inertia'],['vspeed','Vertical speed'],['vinertia','Vertical inertia'],['pitch','Mouse nose tilt']];
+const SPEC=[['speed','Speed'],['accel','Acceleration'],['vspeed','Vertical speed'],['vinertia','Vertical inertia'],['pitch','Mouse nose tilt']];
 let cfg={...DEF};try{Object.assign(cfg,JSON.parse(localStorage.getItem('pp-tune2')||'{}'))}catch(e){}
+['plane','bars','course','inertia'].forEach(k=>cfg[k]=DEF[k]);
 const eff=(k,f=.05)=>Math.max(cfg[k],f);
 const G={x:0,y:0},P={pitch:0,x:0,y:0,vx:0,vy:0,tx:0,ty:0,a:0,lift:0,L:120};
 let W=0,H=0,BW=20,bars=[],nextX=0,prev='bottom',state='ready',level=1,lives=3,left=LEVEL_TIME,flown=0,inv=0,boost=1,last=performance.now(),orbs=[],shots=[],fx=[],sel=0,spinning=false,slowT=0,shieldT=0,owned=[],sig='',acc=0,trails=[],banner=null,trailAcc=0,bag=[],wt=0,mode='cave',cave=[],sec=null,islands=[],islandIn=0;
