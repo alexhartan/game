@@ -29,7 +29,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <header class="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between p-6 sm:p-10 [.touch_&]:px-[max(0.75rem,env(safe-area-inset-left))] [.touch_&]:py-3">
 <div>
 <p id="level" class="font-display text-sm tracking-wider sm:text-base [.touch_&]:text-xs">LEVEL 1</p>
-<p id="timer" class="font-display text-4xl tabular-nums sm:text-5xl [.touch_&]:text-base">0:30</p>
+<p id="timer" class="font-display text-4xl tabular-nums sm:text-5xl [.touch_&]:text-[2rem]">0:30</p>
 <p class="mt-2 font-display text-xs tracking-wider text-sky sm:text-sm [.touch_&]:mt-0 [.touch_&]:text-[10px]">SPEED <span id="vel" class="tabular-nums text-white">100.000</span></p>
 </div>
 <div id="hud" class="flex items-center gap-3 [.touch_&]:gap-2">
@@ -38,6 +38,7 @@ html,body{height:100%;background:var(--deep);overflow:hidden}
 <li class="text-heart transition-colors duration-300"><svg class="h-7 w-7 sm:h-9 sm:w-9 [.touch_&]:h-5 [.touch_&]:w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21 3.8 12.8a5 5 0 0 1 8.2-5.6 5 5 0 0 1 8.2 5.6Z"/></svg></li>
 <li class="text-heart transition-colors duration-300"><svg class="h-7 w-7 sm:h-9 sm:w-9 [.touch_&]:h-5 [.touch_&]:w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 21 3.8 12.8a5 5 0 0 1 8.2-5.6 5 5 0 0 1 8.2 5.6Z"/></svg></li>
 </ul>
+<button id="pauseBtn" hidden type="button" aria-label="Pause" class="pointer-events-auto rounded-md border border-sky/30 bg-deep/80 p-1.5 text-sky transition-colors hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-white"><svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg></button>
 </div>
 </header>
 <div id="wheel" hidden class="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 sm:bottom-6" aria-label="Power-ups, scroll to switch"><div class="relative h-[168px] w-52 overflow-hidden [mask-image:linear-gradient(transparent,#000_30%,#000_70%,transparent)]"><div class="absolute inset-x-0 top-14 h-14 rounded-md border border-sky/30 bg-deep/80"></div><ul id="reel" class="relative -mt-14"></ul></div></div>
@@ -159,8 +160,9 @@ ui.tuneBtn.addEventListener('click',toggleTune);
 const ctrlBtn=document.getElementById('ctrlBtn'),ctrlList=document.getElementById('controls');ctrlBtn.addEventListener('click',()=>{ctrlList.hidden=!ctrlList.hidden;ctrlBtn.setAttribute('aria-expanded',String(!ctrlList.hidden))});
 ui.fs.hidden=!document.fullscreenEnabled;
 if(touch){document.documentElement.classList.add('touch');joyEl.hidden=false;document.getElementById('hud').append(ui.fs);const dt='<dt class="font-display text-xs uppercase tracking-wider">',dd='</dt><dd class="text-sky">';ctrlList.innerHTML=[['Joystick','Drag anywhere to steer. Push further to fly faster.'],['Power-ups','Tap an icon at the bottom right to use it.'],['Blast','Shoots in the direction you steer.'],['Magnet','Pulls nearby power-ups for 10 sec. No pull when the inventory is full.'],['Close call','Skim a wall without a hit to cut speed by 1%.']].map(([a,b])=>dt+a+dd+b+'</dd>').join('');
-stage.addEventListener('pointerdown',e=>{if(state!=='play'||J.id!==null||e.target.closest('#items,#fsBtn,#tune'))return;J.id=e.pointerId;J.ox=e.clientX;J.oy=e.clientY});
-stage.addEventListener('pointermove',e=>{if(e.pointerId!==J.id)return;const r=joyEl.offsetWidth*.32,dx=e.clientX-J.ox,dy=e.clientY-J.oy,d=Math.hypot(dx,dy)||1,k=Math.min(d,r)/d;J.x=dx*k/r;J.y=dy*k/r;knob.style.transform=`translate(${dx*k}px,${dy*k}px)`});
+const pauseBtn=document.getElementById('pauseBtn'),grab=e=>{if((state!=='play'&&state!=='intro')||J.id!==null||e.target.closest('button,#tune'))return;J.id=e.pointerId;J.ox=e.clientX;J.oy=e.clientY};pauseBtn.addEventListener('click',()=>{if(state==='play')pause()});
+stage.addEventListener('pointerdown',grab);
+stage.addEventListener('pointermove',e=>{grab(e);if(e.pointerId!==J.id)return;const r=36,dx=e.clientX-J.ox,dy=e.clientY-J.oy,d=Math.hypot(dx,dy)||1,k=Math.min(d,r)/d;J.x=dx*k/r;J.y=dy*k/r;knob.style.transform=`translate(${dx*k}px,${dy*k}px)`});
 ['pointerup','pointercancel'].forEach(t=>addEventListener(t,e=>{if(e.pointerId!==J.id)return;J.id=null;J.x=J.y=0;knob.style.transform=''}));
 itemsEl.addEventListener('pointerdown',e=>{const b=e.target.closest('button');if(!b||state!=='play')return;sel=+b.dataset.i;fire()})}
 function toggleFs(){if(ui.fs.hidden)return;(document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen()).catch(()=>{ui.fs.hidden=true})}
@@ -207,7 +209,7 @@ function draw(){{const u=state==='intro'?clamp((introT-.5)/1.9,0,1):1,e=u*u*(3-2
 function drawFar(){const st=W*.11,i0=Math.floor(farX/st);cx.fillStyle='rgba(49,80,122,.24)';[0,1].forEach(k=>{cx.beginPath();cx.moveTo(-st,k?H:0);for(let i=i0;i<=i0+11;i++){const h=H*(.08+.24*hsh(i+k*977));cx.lineTo(i*st-farX,k?H-h:h)}cx.lineTo(W+st,k?H:0);cx.fill()})}
 const WK=[[149,9,0],[10,121,0],[113.5,140,1]];function tips(ca,sa){const k=P.lift,z=P.L/431;return WK.map(([x,y,b])=>{const r=mix(b?'brot':'wrot',k)*Math.PI/180,c=Math.cos(r),s=Math.sin(r),dx=(x-225)*mix(b?'bsx':'wsx',k)/100,dy=(y-75)*mix(b?'bsy':'wsy',k)/100,lx=(2.5+dx*c-dy*s)*z,ly=(2+(b?1.5*mix('by',k):0)+dx*s+dy*c)*z;return{x:P.x+lx*ca-ly*sa,y:P.y+lx*sa+ly*ca}})}function drawWake(){if(wake.length<2)return;cx.lineWidth=Math.max(1.5,P.L*.012);cx.lineJoin='round';cx.lineCap='butt';[0,1,2].forEach(j=>{const g=cx.createLinearGradient(wake[0][j].x,0,wake[wake.length-1][j].x,0);g.addColorStop(0,'rgba(255,255,255,0)');g.addColorStop(1,'rgba(255,255,255,.22)');cx.strokeStyle=g;cx.beginPath();wake.forEach((q,i)=>cx[i?'lineTo':'moveTo'](q[j].x,q[j].y));cx.stroke()})}
 let shown='',shownNow='';
-function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=game==='record'?flown.toFixed(2):fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}ui.timer.classList.toggle('text-gold',state==='play'&&(game==='record'?!!rec:left<=5));const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}paintReel();paintTimers();if(touch)joyEl.hidden=state!=='play'&&state!=='intro';vig.style.setProperty('--vx',P.x*cam.z+cam.ox+'px');vig.style.setProperty('--vy',P.y*cam.z+cam.oy+'px');vig.style.setProperty('--vr',P.L*.6*cam.z+'px');const v=(cfg.speed*boost*(slowT>0?.5:1)*100).toFixed(3);if(v!==velEl.textContent)velEl.textContent=v;requestAnimationFrame(frame)}
+function frame(now){const dt=Math.min((now-last)/1000,1/30);last=now;update(dt);draw();const s=game==='record'?flown.toFixed(2):fmt(left);if(s!==shown){shown=s;ui.timer.textContent=s}ui.timer.classList.toggle('text-gold',state==='play'&&(game==='record'?!!rec:left<=5));const n=Math.round(cfg.speed*boost*100)+'%';if(n!==shownNow){shownNow=n;ui.now.textContent=n}paintReel();paintTimers();if(touch){joyEl.hidden=state!=='play'&&state!=='intro';document.getElementById('pauseBtn').hidden=state!=='play'}vig.style.setProperty('--vx',P.x*cam.z+cam.ox+'px');vig.style.setProperty('--vy',P.y*cam.z+cam.oy+'px');vig.style.setProperty('--vr',P.L*.6*cam.z+'px');const v=(cfg.speed*boost*(slowT>0?.5:1)*100).toFixed(3);if(v!==velEl.textContent)velEl.textContent=v;requestAnimationFrame(frame)}
 syncTune();resize();setLives();intro();setLevel();banner=null;requestAnimationFrame(frame);
 </script>
 
